@@ -15,6 +15,7 @@
 #include "DataFormats/EgammaReco/interface/BasicCluster.h"
 
 #include "RecoLocalCalo/HGCalRecAlgos/interface/RecHitTools.h"
+#include "RecoLocalCalo/HGCalRecAlgos/interface/BinnerGPU.h"
 
 // C/C++ headers
 #include <string>
@@ -82,7 +83,8 @@ HGCalImagingAlgo(const std::vector<double>& vecDeltas_in, double kappa_in, doubl
         minpos_(2*(maxlayer+1),{
                 {0.0f,0.0f}
         }),
-        maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} })
+        maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
+        binningPoints(2*(maxlayer+1))
 {
 }
 
@@ -113,7 +115,8 @@ HGCalImagingAlgo(const std::vector<double>& vecDeltas_in, double kappa_in, doubl
 	minpos_(2*(maxlayer+1),{
                 {0.0f,0.0f}
         }),
-	maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} })
+	maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
+        binningPoints(2*(maxlayer+1))
 {
 }
 
@@ -293,6 +296,11 @@ double calculateEnergyWithFraction(const std::vector<KDNode>&, const std::vector
 void shareEnergy(const std::vector<KDNode>&,
                  const std::vector<unsigned>&,
                  std::vector<std::vector<double> >&);
+
+
+BinningData binningPoints;
+
+
 };
 
 #endif
