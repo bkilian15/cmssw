@@ -64,7 +64,7 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
         Hexel(hgrh, detid, isHalf, sigmaNoise, thickness, &rhtools_),
         position.x(), position.y());
 
-    binningPoints[layer].push_back({i, position.eta(),position.phi()});
+    recHitsGPU[layer].push_back({i, position.eta(),position.phi()});
 
     // for each layer, store the minimum and maximum x and y coordinates for the
     // KDTreeBox boundaries
@@ -84,7 +84,7 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
   } // end loop hits
 
    int count = 0;
-   for(auto layer: binningPoints) {
+   for(auto layer: recHitsGPU) {
      std::cout<<"Layer "<<(count++)<<" Rechits: "<<layer.size()<<std::endl;
    }
 }
@@ -97,7 +97,7 @@ void HGCalImagingAlgo::makeClusters() {
   std::cout<<"Hello world!"<<std::endl;
   auto start = std::chrono::high_resolution_clock::now();
 
-  for (auto&layer: binningPoints)
+  for (auto&layer: recHitsGPU)
        BinnerGPU::computeBins(layer);
  
   auto finish = std::chrono::high_resolution_clock::now();

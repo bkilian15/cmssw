@@ -8,7 +8,7 @@
 namespace BinnerGPU {
 
 
-  __global__ void kernel_compute_histogram(RechitForBinning*dInputData, histogram2D<int,ETA_BINS, PHI_BINS, MAX_DEPTH> *dOutputData, const size_t numRechits) {
+  __global__ void kernel_compute_histogram(RecHitGPU*dInputData, histogram2D<int,ETA_BINS, PHI_BINS, MAX_DEPTH> *dOutputData, const size_t numRechits) {
 
     size_t rechitLocation = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -30,15 +30,15 @@ namespace BinnerGPU {
   float maxPhi = M_PI;
 
 //  std::shared_ptr<int> 
-  histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> computeBins(std::vector<RechitForBinning> layerData) {
+  histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> computeBins(std::vector<RecHitGPU> layerData) {
     histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> hOutputData(minEta, maxEta, minPhi, maxPhi);
 
     // Allocate memory and put data into device
     histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> *dOutputData;
-    RechitForBinning* dInputData;
+    RecHitGPU* dInputData;
     cudaMalloc(&dOutputData, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>));
-    cudaMalloc(&dInputData, sizeof(RechitForBinning)*layerData.size());
-    cudaMemcpy(dInputData, layerData.data(), sizeof(RechitForBinning)*layerData.size(), cudaMemcpyHostToDevice);
+    cudaMalloc(&dInputData, sizeof(RecHitGPU)*layerData.size());
+    cudaMemcpy(dInputData, layerData.data(), sizeof(RecHitGPU)*layerData.size(), cudaMemcpyHostToDevice);
     cudaMemset(dOutputData, 0x00, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>));
     cudaMemcpy(dOutputData, &hOutputData, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>), cudaMemcpyHostToDevice);
   

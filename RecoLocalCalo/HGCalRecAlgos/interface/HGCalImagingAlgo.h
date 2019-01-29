@@ -84,7 +84,7 @@ HGCalImagingAlgo(const std::vector<double>& vecDeltas_in, double kappa_in, doubl
                 {0.0f,0.0f}
         }),
         maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
-        binningPoints(2*(maxlayer+1))
+        recHitsGPU(2*(maxlayer+1))
 {
 }
 
@@ -116,7 +116,7 @@ HGCalImagingAlgo(const std::vector<double>& vecDeltas_in, double kappa_in, doubl
                 {0.0f,0.0f}
         }),
 	maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
-        binningPoints(2*(maxlayer+1))
+        recHitsGPU(2*(maxlayer+1))
 {
 }
 
@@ -298,7 +298,7 @@ void shareEnergy(const std::vector<KDNode>&,
                  std::vector<std::vector<double> >&);
 
 
-BinningData binningPoints;
+HgcRecHitsGPU recHitsGPU;
 
 
 };
