@@ -7,7 +7,7 @@
 
 #include "RecoLocalCalo/HGCalRecAlgos/interface/GPUHist2D.h"
 
-struct RecHitGPU { // rename RechitForBinning --> RecHitGPU
+struct RecHitGPU { 
         unsigned int index;
         double x;
         double y;
@@ -21,8 +21,8 @@ struct RecHitGPU { // rename RechitForBinning --> RecHitGPU
         }
 };
 
-typedef std::vector<RecHitGPU>       LayerRecHitsGPU; // rename LayerData --> LayerRecHitsGPU
-typedef std::vector<LayerRecHitsGPU> HgcRecHitsGPU  ; // rename BinningData --> HgcRecHitsGPU
+typedef std::vector<RecHitGPU>       LayerRecHitsGPU;
+typedef std::vector<LayerRecHitsGPU> HgcRecHitsGPU  ;
 
 namespace BinnerGPU {
     // eta_width = 0.05
@@ -35,10 +35,9 @@ const int ETA_BINS=28;
 const int PHI_BINS=126;
 const int MAX_DEPTH=20;
 
+typedef histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> Histo2D;
 
-
-//std::shared_ptr<int> 
-histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> computeBins(LayerRecHitsGPU layerData);
+Histo2D computeBins(LayerRecHitsGPU layerData);
 
 }
 

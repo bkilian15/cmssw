@@ -8,7 +8,7 @@
 namespace BinnerGPU {
 
 
-  __global__ void kernel_compute_histogram(RecHitGPU*dInputData, histogram2D<int,ETA_BINS, PHI_BINS, MAX_DEPTH> *dOutputData, const size_t numRechits) {
+  __global__ void kernel_compute_histogram(RecHitGPU*dInputData, Histo2D *dOutputData, const size_t numRechits) {
 
     size_t rechitLocation = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -30,17 +30,17 @@ namespace BinnerGPU {
   float maxPhi = M_PI;
 
 //  std::shared_ptr<int> 
-  histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> computeBins(std::vector<RecHitGPU> layerData) {
-    histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> hOutputData(minEta, maxEta, minPhi, maxPhi);
+  Histo2D computeBins(std::vector<RecHitGPU> layerData) {
+    Histo2D hOutputData(minEta, maxEta, minPhi, maxPhi);
 
     // Allocate memory and put data into device
-    histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> *dOutputData;
+    Histo2D *dOutputData;
     RecHitGPU* dInputData;
-    cudaMalloc(&dOutputData, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>));
+    cudaMalloc(&dOutputData, sizeof(Histo2D));
     cudaMalloc(&dInputData, sizeof(RecHitGPU)*layerData.size());
     cudaMemcpy(dInputData, layerData.data(), sizeof(RecHitGPU)*layerData.size(), cudaMemcpyHostToDevice);
-    cudaMemset(dOutputData, 0x00, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>));
-    cudaMemcpy(dOutputData, &hOutputData, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>), cudaMemcpyHostToDevice);
+    cudaMemset(dOutputData, 0x00, sizeof(Histo2D));
+    cudaMemcpy(dOutputData, &hOutputData, sizeof(Histo2D), cudaMemcpyHostToDevice);
   
     // Call the kernel
     const dim3 blockSize(1024,1,1);
@@ -48,7 +48,7 @@ namespace BinnerGPU {
     kernel_compute_histogram <<<gridSize,blockSize>>>(dInputData, dOutputData, layerData.size());
 
     // Copy result back!
-    cudaMemcpy(dOutputData, &hOutputData, sizeof(histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH>), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dOutputData, &hOutputData, sizeof(Histo2D), cudaMemcpyDeviceToHost);
 
     // Free all the memory
     cudaFree(dOutputData);
