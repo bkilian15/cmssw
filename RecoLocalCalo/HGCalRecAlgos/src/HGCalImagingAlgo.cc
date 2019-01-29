@@ -14,6 +14,7 @@
 
 //GPU Add
 #include "RecoLocalCalo/HGCalRecAlgos/interface/BinnerGPU.h"
+#include "RecoLocalCalo/HGCalRecAlgos/interface/GPUHist2D.h"
 #include <chrono>
 
 void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
@@ -94,19 +95,20 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
 // input (reset should be called between events)
 void HGCalImagingAlgo::makeClusters() {
 
-  std::cout<<"Hello world!"<<std::endl;
+  std::cout << "- makeClusters() starts" << std::endl;
   auto start = std::chrono::high_resolution_clock::now();
 
-  for (auto&layer: recHitsGPU)
-       BinnerGPU::computeBins(layer);
+  // For each layer, assign all RecHits to a bin of a Histo2D
+  std::vector< BinnerGPU::Histo2D > histosGPU;
+  for (auto&layer: recHitsGPU) {
+    histosGPU.push_back( BinnerGPU::computeBins(layer) );
+  }
  
   auto finish = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = finish - start;
   std::cout << "Elapsed time: " << elapsed.count() << " s\n";
-  std::cout<<"End of the world!"<<std::endl;
-
  
-  exit(0);
+  exit(0); // fixme: temporary stopper for test purposes
 
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core or halo
