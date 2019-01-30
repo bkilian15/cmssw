@@ -9,14 +9,28 @@
 
 struct RecHitGPU { 
         unsigned int index;
+
         double x;
-        double y;
-        double eta;
+	double y;
+
+	double eta;
         double phi;
-        double rho;
+	
+        double weight;
+	double rho;
         double delta;
+   
         int nearestHigher;
-        bool operator > (const RecHitGPU& rhs) const {
+   
+        bool isBorder;
+        bool isHalo;
+   
+        int clusterIndex;
+   
+        float sigmaNoise;
+        float thickness;   
+ 	
+	bool operator > (const RecHitGPU& rhs) const {
                 return (rho > rhs.rho);
         }
 };
