@@ -17,6 +17,8 @@
 #include "RecoLocalCalo/HGCalRecAlgos/interface/GPUHist2D.h"
 #include <chrono>
 
+//#include "RecoLocalCalo/HGCalRecAlgos/src/HGCalImagingAlgo.cu"
+
 void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
   // loop over all hits and create the Hexel structure, skip energies below ecut
 
@@ -65,7 +67,7 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
         Hexel(hgrh, detid, isHalf, sigmaNoise, thickness, &rhtools_),
         position.x(), position.y());
 
-    recHitsGPU[layer].push_back({i, position.x(),position.y(), position.eta(),position.phi()});
+    recHitsGPU[layer].push_back({i, position.x(),position.y(), position.eta(),position.phi(), 0.0, 0.0, 0});
 
     // for each layer, store the minimum and maximum x and y coordinates for the
     // KDTreeBox boundaries
@@ -84,10 +86,10 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
 
   } // end loop hits
 
-   int count = 0;
-   for(auto layer: recHitsGPU) {
-     std::cout<<"Layer "<<(count++)<<" Rechits: "<<layer.size()<<std::endl;
-   }
+  //  int count = 0;
+  //  for(auto layer: recHitsGPU) {
+  //    std::cout<<"Layer "<<(count++)<<" Rechits: "<<layer.size()<<std::endl;
+  //  }
 }
 // Create a vector of Hexels associated to one cluster from a collection of
 // HGCalRecHits - this can be used directly to make the final cluster list -
@@ -108,12 +110,12 @@ void HGCalImagingAlgo::makeClusters() {
   std::chrono::duration<double> elapsed = finish - start;
   std::cout << "Elapsed time: " << elapsed.count() << " s\n";
  
-  exit(0); // fixme: temporary stopper for test purposes
+  // exit(0); // fixme: temporary stopper for test purposes
 
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core or halo
   tbb::this_task_arena::isolate([&] {
-    tbb::parallel_for(size_t(0), size_t(2 * maxlayer + 2), [&](size_t i) {
+    tbb::parallel_for(size_t(4), size_t(5), [&](size_t i) {
       KDTreeBox bounds(minpos_[i][0], maxpos_[i][0], minpos_[i][1], maxpos_[i][1]);
       KDTree hit_kdtree;
       hit_kdtree.build(points_[i], bounds);
@@ -127,9 +129,25 @@ void HGCalImagingAlgo::makeClusters() {
           points_[i], hit_kdtree, actualLayer); // also stores rho (energy
                                                // density) for each point (node)
       // calculate distance to nearest point with higher density storing
-      // distance (delta) and point's index
+      // distance (delta) and point's index      
+      
+      for(size_t zz = 0; zz < points_[i].size(); ++zz){
+        recHitsGPU[i][zz].rho = points_[i][zz].data.rho;
+      }
       calculateDistanceToHigher(points_[i]);
       calculateDistanceToHigherGPU(recHitsGPU[i]);
+
+      for(size_t zz = 0; zz < 50; ++zz){
+        std::cout << "point \n" <<
+        points_[i][zz].data.delta << ", " <<
+        points_[i][zz].data.nearestHigher << std::endl;
+
+        std::cout << "rechit \n" <<
+        recHitsGPU[i][zz].delta << ", " <<
+        recHitsGPU[i][zz].nearestHigher << std::endl;
+      }
+      
+
       findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds,
                             actualLayer, layerClustersPerLayer_[i]);
     });
@@ -294,6 +312,7 @@ HGCalImagingAlgo::calculateDistanceToHigher(std::vector<KDNode> &nd) const {
 
   // sort vector of Hexels by decreasing local density
   std::vector<size_t> rs = sorted_indices(nd);
+  // for(size_t tt = 0; tt < 50; ++tt) std::cout << "CPU: " << rs[tt] << std::endl;
 
   double maxdensity = 0.0;
   int nearestHigher = -1;
@@ -346,10 +365,11 @@ HGCalImagingAlgo::calculateDistanceToHigherGPU(std::vector<RecHitGPU> &nd) const
 
   // sort vector of Hexels by decreasing local density
   std::vector<size_t> rs = sorted_indices(nd);
-  for (size_t n = 0; n < rs.size(); n++)
-    std::cout <<rs[n] <<" ";
-  std::cout <<std::endl;
-  exit(0);
+  // for(size_t tt = 0; tt < 50; ++tt) std::cout << "GPU: " << rs[tt] << std::endl;
+  // for (size_t n = 0; n < rs.size(); n++)
+  //   std::cout <<rs[n] <<" ";
+  // std::cout <<std::endl;
+  // exit(0);
 
   double maxdensity = 0.0;
   int nearestHigher = -1;

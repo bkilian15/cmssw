@@ -309,4 +309,14 @@ HgcRecHitsGPU recHitsGPU;
 
 };
 
+namespace HGCalRecAlgos {
+        double calculateLocalDensityGPU(BinnerGPU::Histo2D theHist, const LayerRecHitsGPU theHits, const unsigned int layer,std::vector<double> vecDeltas_);
+        void launch_kenrel_compute_distance_ToHigher(
+                std::vector<RecHitGPU>& nd,
+                std::vector<size_t>& rs,
+                int& nearestHigher,
+                const double max_dist2
+        );
+}
+
 #endif
