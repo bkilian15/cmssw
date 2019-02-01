@@ -151,6 +151,11 @@ void reset(){
                 it.clear();
                 std::vector<KDNode>().swap(it);
         }
+        for( auto& it: recHitsGPU)
+        {
+                it.clear();
+                std::vector<RecHitGPU>().swap(it);
+        }
         for(unsigned int i = 0; i < minpos_.size(); i++)
         {
                 minpos_[i][0]=0.; minpos_[i][1]=0.;
@@ -299,7 +304,7 @@ inline double distanceCPU(const RecHitGPU &pt1, const RecHitGPU &pt2) const{   /
 
 double calculateLocalDensity(std::vector<KDNode> &, KDTree &, const unsigned int) const;   //return max density
 double calculateLocalDensityGPU(Histo2D, LayerRecHitsGPU , unsigned int,std::vector<double>) const;
-double calculateLocalDensityCPU(Histo2D, LayerRecHitsGPU, const unsigned int) const;
+double calculateLocalDensityCPU(Histo2D, LayerRecHitsGPU &, const unsigned int) const;
 
 double calculateDistanceToHigher(std::vector<KDNode> &) const;
 double calculateDistanceToHigherGPU(std::vector<RecHitGPU> &nd) const;
