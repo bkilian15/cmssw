@@ -122,7 +122,7 @@ void HGCalImagingAlgo::makeClusters() {
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core or halo
   tbb::this_task_arena::isolate([&] {
-    tbb::parallel_for(size_t(4), size_t(5), [&](size_t i) {
+    tbb::parallel_for(size_t(0), size_t(2 * maxlayer + 2), [&](size_t i) {
       KDTreeBox bounds(minpos_[i][0], maxpos_[i][0], minpos_[i][1], maxpos_[i][1]);
       KDTree hit_kdtree;
       hit_kdtree.build(points_[i], bounds);
@@ -135,27 +135,25 @@ void HGCalImagingAlgo::makeClusters() {
       double maxdensity = calculateLocalDensity(
           points_[i], hit_kdtree, actualLayer); // also stores rho (energy
                                                // density) for each point (node)
-      double maxdensityBin = calculateLocalDensityCPU(histosGPU[i],recHitsGPU[i],actualLayer); 
-
+      double maxdensityBin = calculateLocalDensityCPU(histosGPU[i], recHitsGPU[i], actualLayer);
+      std::cout <<"maxdensity = "    <<maxdensity    <<std::endl;
+      std::cout <<"maxdensityBin = " <<maxdensityBin <<std::endl;
       // calculate distance to nearest point with higher density storing
       // distance (delta) and point's index      
-      
-      for(size_t zz = 0; zz < points_[i].size(); ++zz){
-        recHitsGPU[i][zz].rho = points_[i][zz].data.rho;
-      }
       calculateDistanceToHigher(points_[i]);
       calculateDistanceToHigherGPU(recHitsGPU[i]);
 
-      for(size_t zz = 0; zz < 50; ++zz){
-        std::cout << "point \n" <<
-        points_[i][zz].data.delta << ", " <<
-        points_[i][zz].data.nearestHigher << std::endl;
+      std::vector<size_t> rs = sorted_indices(points_[i]);
+      std::vector<size_t> rsGPU = sorted_indices(recHitsGPU[i]);
+      for(size_t zz = 0; zz < 10; ++zz){
+        std::cout << "\npoint \n" <<
+        points_[i][rs[zz]].data.delta << ", " <<
+        points_[i][rs[zz]].data.nearestHigher << std::endl;
 
-        std::cout << "rechit \n" <<
-        recHitsGPU[i][zz].delta << ", " <<
-        recHitsGPU[i][zz].nearestHigher << std::endl;
+        std::cout << "recHit \n" <<
+        recHitsGPU[i][rsGPU[zz]].delta << ", " <<
+        recHitsGPU[i][rsGPU[zz]].nearestHigher << std::endl;
       }
-      
 
       findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds,
                             actualLayer, layerClustersPerLayer_[i]);
@@ -330,7 +328,6 @@ HGCalImagingAlgo::calculateDistanceToHigher(std::vector<KDNode> &nd) const {
 
   // sort vector of Hexels by decreasing local density
   std::vector<size_t> rs = sorted_indices(nd);
-  // for(size_t tt = 0; tt < 50; ++tt) std::cout << "CPU: " << rs[tt] << std::endl;
 
   double maxdensity = 0.0;
   int nearestHigher = -1;
@@ -383,11 +380,6 @@ HGCalImagingAlgo::calculateDistanceToHigherGPU(std::vector<RecHitGPU> &nd) const
 
   // sort vector of Hexels by decreasing local density
   std::vector<size_t> rs = sorted_indices(nd);
-  // for(size_t tt = 0; tt < 50; ++tt) std::cout << "GPU: " << rs[tt] << std::endl;
-  // for (size_t n = 0; n < rs.size(); n++)
-  //   std::cout <<rs[n] <<" ";
-  // std::cout <<std::endl;
-  // exit(0);
 
   double maxdensity = 0.0;
   int nearestHigher = -1;
@@ -767,7 +759,7 @@ void HGCalImagingAlgo::computeThreshold() {
 
 }
 
-double HGCalImagingAlgo::calculateLocalDensityCPU(Histo2D hist, LayerRecHitsGPU hits, const unsigned int layer) const
+double HGCalImagingAlgo::calculateLocalDensityCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const
 {
    float delta_c; // maximum search distance (critical distance) for local
                  // density calculation
