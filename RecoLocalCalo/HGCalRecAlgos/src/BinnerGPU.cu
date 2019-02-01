@@ -15,12 +15,11 @@ namespace BinnerGPU {
     if(rechitLocation >= numRechits)
         return;
 
-    float eta = dInputData[rechitLocation].eta;
-    float phi = dInputData[rechitLocation].phi;
-    unsigned int index = dInputData[rechitLocation].index;
+    float x = dInputData[rechitLocation].x;
+    float y = dInputData[rechitLocation].y;
    
-    dOutputData->fillBinGPU(eta, phi, index);
-    //printf("%d %.2f %.2f %d \n",index,eta,phi,rechitLocation);
+    dOutputData->fillBinGPU(x, y, rechitLocation);
+
   }
 
 
@@ -29,9 +28,12 @@ namespace BinnerGPU {
   float minPhi = -M_PI;
   float maxPhi = M_PI;
 
+  float minX = -500.0, minY = -500.0;
+  float maxX = 500.0, maxY = 500.0;
 //  std::shared_ptr<int> 
-  Histo2D computeBins(std::vector<RecHitGPU> layerData) {
-    Histo2D hOutputData(minEta, maxEta, minPhi, maxPhi);
+  Histo2D computeBins(std::vector<RecHitGPU> layerData)//,double xMin=-500.0,double yMin=-500.0, double xMax=500.0, double yMax=500.0) {
+  {
+    Histo2D hOutputData(minX,maxX,minY,maxY);
 
     // Allocate memory and put data into device
     Histo2D*   dOutputData;//(minEta, maxEta, minPhi, maxPhi);

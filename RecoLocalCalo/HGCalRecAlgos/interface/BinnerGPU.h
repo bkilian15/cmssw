@@ -45,13 +45,13 @@ namespace BinnerGPU {
     // 1.4/0.05 = 28
     // 20 (as heuristic)
 
-const int ETA_BINS=28;//20;
-const int PHI_BINS=126;
-const int MAX_DEPTH=50;
+const int ETA_BINS=50;//20;
+const int PHI_BINS=50;
+const int MAX_DEPTH=100;
 
 typedef histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> Histo2D;
 
-Histo2D computeBins(LayerRecHitsGPU layerData);
+Histo2D computeBins(LayerRecHitsGPU layerData);//,double,double,double,double);
 
 }
 
