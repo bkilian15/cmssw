@@ -9,8 +9,30 @@
 
 struct RecHitGPU { 
         unsigned int index;
-        float eta;
-        float phi;
+
+        double x;
+	double y;
+
+	double eta;
+        double phi;
+	
+        double weight;
+	double rho;
+        double delta;
+   
+        int nearestHigher;
+   
+        bool isBorder;
+        bool isHalo;
+   
+        int clusterIndex;
+   
+        float sigmaNoise;
+        float thickness;   
+ 	
+	bool operator > (const RecHitGPU& rhs) const {
+                return (rho > rhs.rho);
+        }
 };
 
 typedef std::vector<RecHitGPU>       LayerRecHitsGPU;
@@ -23,14 +45,13 @@ namespace BinnerGPU {
     // 1.4/0.05 = 28
     // 20 (as heuristic)
 
-const int ETA_BINS=28;
-const int PHI_BINS=126;
-const int MAX_DEPTH=20;
+const int X_BINS=50;
+const int Y_BINS=50;
+const int MAX_DEPTH=100;
 
-typedef histogram2D<int, ETA_BINS, PHI_BINS, MAX_DEPTH> Histo2D;
+typedef histogram2D<int, X_BINS, Y_BINS, MAX_DEPTH> Histo2D;
 
 Histo2D computeBins(LayerRecHitsGPU layerData);
-
 }
 
 
