@@ -12,6 +12,11 @@
 #include "tbb/task_arena.h"
 #include "tbb/tbb.h"
 
+//GPU Add
+#include "RecoLocalCalo/HGCalRecAlgos/interface/BinnerGPU.h"
+#include "RecoLocalCalo/HGCalRecAlgos/interface/GPUHist2D.h"
+#include <chrono>
+
 void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
   // loop over all hits and create the Hexel structure, skip energies below ecut
 
@@ -60,6 +65,8 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
         Hexel(hgrh, detid, isHalf, sigmaNoise, thickness, &rhtools_),
         position.x(), position.y());
 
+    recHitsGPU[layer].push_back({i, position.eta(),position.phi()});
+
     // for each layer, store the minimum and maximum x and y coordinates for the
     // KDTreeBox boundaries
     if (firstHit[layer]) {
@@ -76,12 +83,33 @@ void HGCalImagingAlgo::populate(const HGCRecHitCollection &hits) {
     }
 
   } // end loop hits
+
+   int count = 0;
+   for(auto layer: recHitsGPU) {
+     std::cout<<"Layer "<<(count++)<<" Rechits: "<<layer.size()<<std::endl;
+   }
 }
 // Create a vector of Hexels associated to one cluster from a collection of
 // HGCalRecHits - this can be used directly to make the final cluster list -
 // this method can be invoked multiple times for the same event with different
 // input (reset should be called between events)
 void HGCalImagingAlgo::makeClusters() {
+
+  std::cout << "- makeClusters() starts" << std::endl;
+  auto start = std::chrono::high_resolution_clock::now();
+
+  // For each layer, assign all RecHits to a bin of a Histo2D
+  std::vector< BinnerGPU::Histo2D > histosGPU;
+  for (auto&layer: recHitsGPU) {
+    histosGPU.push_back( BinnerGPU::computeBins(layer) );
+  }
+ 
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = finish - start;
+  std::cout << "Elapsed time: " << elapsed.count() << " s\n";
+ 
+  exit(0); // fixme: temporary stopper for test purposes
+
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core or halo
   tbb::this_task_arena::isolate([&] {

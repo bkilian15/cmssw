@@ -15,6 +15,7 @@
 #include "DataFormats/EgammaReco/interface/BasicCluster.h"
 
 #include "RecoLocalCalo/HGCalRecAlgos/interface/RecHitTools.h"
+#include "RecoLocalCalo/HGCalRecAlgos/interface/BinnerGPU.h"
 
 // C/C++ headers
 #include <string>
@@ -86,7 +87,8 @@ enum VerbosityLevel { pDEBUG = 0, pWARNING = 1, pINFO = 2, pERROR = 3 };
         minpos_(2*(maxlayer+1),{
                 {0.0f,0.0f}
         }),
-        maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} })
+        maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
+        recHitsGPU(2*(maxlayer+1))
 {
 }
 
@@ -121,7 +123,10 @@ HGCalImagingAlgo(const std::vector<double>& thresholdW0_in, const std::vector<do
         minpos_(2*(maxlayer+1),{
                 {0.0f,0.0f}
         }),
-        maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} })
+
+	maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
+        recHitsGPU(2*(maxlayer+1))
+
 {
 }
 
@@ -305,6 +310,11 @@ double calculateEnergyWithFraction(const std::vector<KDNode>&, const std::vector
 void shareEnergy(const std::vector<KDNode>&,
                  const std::vector<unsigned>&,
                  std::vector<std::vector<double> >&);
+
+
+HgcRecHitsGPU recHitsGPU;
+
+
 };
 
 #endif
