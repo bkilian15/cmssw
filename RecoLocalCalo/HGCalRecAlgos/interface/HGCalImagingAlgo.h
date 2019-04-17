@@ -317,8 +317,7 @@ inline double distanceCPU(const RecHitGPU &pt1, const RecHitGPU &pt2) const{   /
  } 
 
 double calculateLocalDensity(std::vector<KDNode> &, KDTree &, const unsigned int) const;   //return max density
-double calculateLocalDensityGPU(Histo2D, LayerRecHitsGPU , unsigned int,std::vector<double>) const;
-double calculateLocalDensityCPU(Histo2D, LayerRecHitsGPU &, const unsigned int) const;
+double calculateLocalDensity_BinCPU(Histo2D, LayerRecHitsGPU &, const unsigned int) const;
 
 double calculateDistanceToHigher(std::vector<KDNode> &) const;
 double calculateDistanceToHigherGPU(std::vector<RecHitGPU> &nd) const;
@@ -348,6 +347,10 @@ namespace HGCalRecAlgos {
                 int& nearestHigher,
                 const double max_dist2
         );
+}
+
+namespace HGCalRecAlgosBen {
+  double calculateLocalDensity_BinGPU(const BinnerGPU::Histo2D& theHist, LayerRecHitsGPU& theHits, const unsigned int layer,std::vector<double> vecDeltas_);
 }
 
 #endif

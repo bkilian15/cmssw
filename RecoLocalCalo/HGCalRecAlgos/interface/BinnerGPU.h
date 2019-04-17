@@ -7,6 +7,34 @@
 
 #include "RecoLocalCalo/HGCalRecAlgos/interface/GPUHist2D.h"
 
+struct RecHitGPUSoA { 
+        unsigned int* index;
+
+        double* x;
+	double* y;
+
+	double* eta;
+        double* phi;
+	
+        double* weight;
+	double* rho;
+        double* delta;
+   
+        int* nearestHigher;
+   
+        bool* isBorder;
+        bool* isHalo;
+   
+        int* clusterIndex;
+   
+        float* sigmaNoise;
+        float* thickness;   
+ 	
+	// bool operator > (const RecHitGPU& rhs) const {
+        //         return (rho > rhs.rho);
+        // }
+};
+
 struct RecHitGPU { 
         unsigned int index;
 

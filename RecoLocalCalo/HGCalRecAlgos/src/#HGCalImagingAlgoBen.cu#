@@ -1,0 +1,77 @@
+//#include "RecoLocalCalo/HGCalRecAlgos/interface/HGCalImagingAlgo.h
+
+//GPU Add
+#include "RecoLocalCalo/HGCalRecAlgos/interface/BinnerGPU.h"
+#include <math.h>
+
+using namespace BinnerGPU;
+
+namespace HGCalRecAlgosBen{
+
+
+static const unsigned int lastLayerEE = 28;
+static const unsigned int lastLayerFH = 40;
+
+__global__ void kernel_compute_density_(Histo2D* theHist, LayerRecHitsGPU* theHits, float* \
+delta_c, double* density)
+{
+        //size_t binIndex = threadIdx.x;
+        density[threadIdx.x] = 5.3;
+        //printf("%d \n", density[10]);
+}
+
+//      template <typename T> std::string type_name();
+
+double calculateLocalDensityGPUBen(BinnerGPU::Histo2D theHist, const LayerRecHitsGPU theHits, \
+const unsigned int layer, std::vector<double> vecDeltas_){
+
+      double maxdensity = 0.;
+      double delta_c = 10.;
+
+      Histo2D *dInputHist; // make GPU histogram
+      LayerRecHitsGPU *dInputRecHits;  // make input hits for GPU
+      float *dDelta_c; // delta c for GPU
+      double *dDensity;
+      double *hDensity[2500];
+      int numBins = theHist.data_.size();
+
+      cudaMalloc((void **)&dInputHist, sizeof(Histo2D));
+      cudaMalloc((void **)&dInputRecHits, sizeof(RecHitGPU)*theHits.size());
+      cudaMalloc((void **)&dDelta_c, sizeof(dDelta_c));
+      cudaMalloc((void **)&dDensity, sizeof(double)*numBins);
+
+      cudaMemset(hDensity, 0x00, sizeof(double)*numBins);
+
+      cudaMemcpy(dDelta_c, &delta_c, sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(dInputHist, &theHist, sizeof(Histo2D), cudaMemcpyHostToDevice);
+      cudaMemcpy(dInputRecHits, &theHits, sizeof(RecHitGPU)*theHits.size(), cudaMemcpyHostToDe\
+vice);
+      cudaMemcpy(dDensity, &hDensity, sizeof(double)*numBins, cudaMemcpyDeviceToHost);
+
+      // KERNEL CALL
+      const dim3 blockSize(1024, 1, 1);
+      const dim3 gridSize(1, 1, 1);
+
+
+      kernel_compute_density_ben <<<gridSize, blockSize>>>(dInputHist, dInputRecHits, dDelta_c\
+, dDensity);
+
+      cudaMemcpy(hDensity, &dDensity, sizeof(double)*numBins, cudaMemcpyDeviceToHost);
+
+      cudaFree(dDensity);
+      cudaFree(dInputHist);
+      cudaFree(dDelta_c);
+      cudaFree(dInputRecHits);
+
+
+      std::cout << "printing 10th element " << hDensity[10] << std::endl;
+
+  //    std::cout << "hDensity[10] type: " << type_name<decltype(hDensity[10])>();
+
+  //    std::cout << ". hDensity type: " << type_name<decltype(hDensity)>() << std::endl;
+
+      return 2.0;//hDensity[10];
+
+}
+
+}

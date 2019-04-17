@@ -135,16 +135,16 @@ void HGCalImagingAlgo::makeClusters() {
       double maxdensity = calculateLocalDensity(
           points_[i], hit_kdtree, actualLayer); // also stores rho (energy
                                                // density) for each point (node)
-      //double maxdensityBin = calculateLocalDensity_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
+      double maxdensityBin = calculateLocalDensity_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
 
 
-      //if( (abs(maxdensity - maxdensityBin)/maxdensity)/100 > .01){
+      if( (abs(maxdensity - maxdensityBin)/maxdensity)/100 > .01){
        	   double maxdensityGPUBen = HGCalRecAlgosBen::calculateLocalDensity_BinGPU(histosGPU[i], recHitsGPU[i], actualLayer, vecDeltas_);
-	   //std::cout << "failure! ";
+	   std::cout << "failure! ";
 	   std::cout <<"maxdensity = "    <<maxdensity;
-	   //std::cout <<". maxdensityBin = " <<maxdensityBin;
+	   std::cout <<". maxdensityBin = " <<maxdensityBin;
 	   std::cout <<". maxdensityGPUBen = "<<maxdensityGPUBen<<std::endl;
-      //}
+      }
       // calculate distance to nearest point with higher density storing
       // distance (delta) and point's index      
       calculateDistanceToHigher(points_[i]);
@@ -344,6 +344,14 @@ double HGCalImagingAlgo::calculateLocalDensity(std::vector<KDNode> &nd,
     lp.search(search_box, found);
     const unsigned int found_size = found.size();
 
+    for(int xBin = search_box[0]; xBin < search_box[1]+1; xBin++)
+    {
+      for(int yBin = search_box[2]; yBin < search_box[3]+1; yBin++)
+      {
+
+      }
+    }
+
     for (unsigned int j = 0; j < found_size; j++) {
  
       if (distance(nd[i].data, found[j].data) < delta_c) {
@@ -359,41 +367,41 @@ double HGCalImagingAlgo::calculateLocalDensity(std::vector<KDNode> &nd,
 }
 
 
-//double HGCalImagingAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const
-//{
-  // double maxdensity = 0.0;
-  // float delta_c = 2*maxdensity; // maximum search distance (critical distance) for local
+double HGCalImagingAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const
+{
+   double maxdensity = 0.0;
+   float delta_c; // maximum search distance (critical distance) for local
                  // density calculation
-   //if (layer <= lastLayerEE)
-    //delta_c = vecDeltas_[0];
-   //else if (layer <= lastLayerFH)
-    //delta_c = vecDeltas_[1];
-   //else
-    //delta_c = vecDeltas_[2];
+   if (layer <= lastLayerEE)
+    delta_c = vecDeltas_[0];
+   else if (layer <= lastLayerFH)
+    delta_c = vecDeltas_[1];
+   else
+    delta_c = vecDeltas_[2];
     
-   //for(unsigned int i = 0; i < hits.size(); i++)
-   //{
-     //std::array<int, 4> search_box = hist.searchBox(hits[i].x - delta_c, hits[i].x + delta_c, hits[i].y - delta_c, hits[i].y + delta_c); 
-   
+   for(unsigned int i = 0; i < hits.size(); i++)
+   {
+     std::array<int, 4> search_box = hist.searchBox(hits[i].x - delta_c, hits[i].x + delta_c, hits[i].y - delta_c, hits[i].y + delta_c); 
 	
-	//double tmpDensity = 0.0;
-	//int binId = hist.getBinIdx(hits[i].x,hits[i].y);
-	//size_t binSize  = hist.data_[binId].size();
-   ///}
-	//for (unsigned int j = 0; j < binSize; j++)
-	//{
-		//int idTwo = hist.data_[binId][j];
-		//if(distanceCPU(hits[i],hits[idTwo]) < delta_c)
-		//{
-			//hits[i].rho += hits[idTwo].weight;
-        //                tmpDensity = std::max(tmpDensity,hits[i].rho);
-          //      }
-	//}
-	//maxdensity = std::max(maxdensity,tmpDensity);
-   //}
+	
+	double tmpDensity = 0.0;
+	int binId = hist.getBinIdx(hits[i].x,hits[i].y);
+	size_t binSize  = hist.data_[binId].size();
 
-	//return maxdensity;
-//}
+	for (unsigned int j = 0; j < binSize; j++)
+	{
+		int idTwo = hist.data_[binId][j];
+		if(distanceCPU(hits[i],hits[idTwo]) < delta_c)
+		{
+			hits[i].rho += hits[idTwo].weight;
+                        tmpDensity = std::max(tmpDensity,hits[i].rho);
+                }
+	}
+	maxdensity = std::max(maxdensity,tmpDensity);
+   }
+
+	return maxdensity;
+}
 
 
 
