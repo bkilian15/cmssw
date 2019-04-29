@@ -416,6 +416,9 @@ int HGCalCLUEAlgo::findAndAssignClusters(std::vector<KDNode> &nd, KDTree &lp, do
       }
     }
   }
+  for(unsigned i=0; i<nd_size; ++i)
+      std::cout << "Hexel N: " << i << " | clusterIndex: " << nd[i].data.clusterIndex << " | Delta: " << nd[i].data.delta << " | NearestHigher: " << nd[i].data.nearestHigher << " | Density: " << nd[i].data.rho << std::endl;
+    
 
   // prepare the offset for the next layer if there is one
   if (verbosity_ < pINFO) {
