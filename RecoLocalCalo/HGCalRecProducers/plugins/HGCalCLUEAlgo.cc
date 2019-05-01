@@ -18,6 +18,8 @@
 
 #include <chrono>
 #include <stdlib.h>     /* malloc, free, rand */
+#include <iostream>
+#include <fstream>
 
 
 using namespace hgcal_clustering;
@@ -112,12 +114,17 @@ void HGCalCLUEAlgo::makeClusters() {
   // For each layer, assign all RecHits to a bin of a Histo2D
   std::vector< BinnerGPU::Histo2D > histosGPU;
   for (auto&layer: recHitsGPU) {
-      histosGPU.push_back( BinnerGPU::computeBins(layer) );
+    histosGPU.push_back( BinnerGPU::computeBins(layer) );
   }
     
   auto finish = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = finish - start;
   std::cout << "Elapsed time: " << elapsed.count() << " s\n";
+
+  std::ofstream kdtFile,cpuFile,gpuFile;
+  kdtFile.open ("kdtFile.csv");
+  cpuFile.open ("cpuFile.csv");
+  gpuFile.open ("gpuFile.csv");
     
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core
@@ -141,27 +148,48 @@ void HGCalCLUEAlgo::makeClusters() {
       calculateDistanceToHigher(points_[i]);
       findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds, actualLayer,
                             layerClustersPerLayer_[i]);
+
+      for(unsigned j=0; j<points_[i].size(); ++j){
+        auto temp = points_[i][j].data;
+        std::cout << "KDTree Hexel: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << std::endl;
+        kdtFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
+      }
+
         
       // Bin CPU
       calculateLocalDensity_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
       calculateDistanceToHigher_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
       findAndAssignClusters_BinCPU(recHitsGPU[i], actualLayer);
-        
+
       for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
-          std::cout << "CPU RecHit N: " << j << " |  nFollowers " << recHitsGPU[i][j].followers.size() << " | clusterIndex: " << recHitsGPU[i][j].clusterIndex << " | Delta: " << recHitsGPU[i][j].delta << " | NearestHigher: " << recHitsGPU[i][j].nearestHigher << " | Density: " << recHitsGPU[i][j].rho << " | rho_c: " << kappa_*recHitsGPU[i][j].sigmaNoise << std::endl;
-//          recHitsGPU[i][j].rho = 0;
-//          recHitsGPU[i][j].delta = 0;
-//          recHitsGPU[i][j].nearestHigher = 0;
-//          recHitsGPU[i][j].clusterIndex = 0 ;
-//          recHitsGPU[i][j].followers.reset();
+        auto temp = recHitsGPU[i][j];
+        std::cout << "CPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
+        cpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
+        
+        recHitsGPU[i][j].rho = 0;
+        recHitsGPU[i][j].delta = 0;
+        recHitsGPU[i][j].nearestHigher = 0;
+        recHitsGPU[i][j].clusterIndex = 0 ;
+        recHitsGPU[i][j].followers.reset();
       }
 
-        
-        
+
+      // Bin GPU
+      HGCalRecAlgos::clue_BinGPU(histosGPU[i], recHitsGPU[i], actualLayer, vecDeltas_, kappa_, outlierDeltaFactor_);
+      for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
+        auto temp = recHitsGPU[i][j];
+        std::cout << "GPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
+        gpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
+      }
+
     });
   });
-  //Now that we have the density per point we can store it
   for(auto const& p: points_) { setDensity(p); }
+
+  kdtFile.close();
+  cpuFile.close();
+  gpuFile.close();
+
 }
 
 std::vector<reco::BasicCluster> HGCalCLUEAlgo::getClusters(bool) {
@@ -288,6 +316,8 @@ double HGCalCLUEAlgo::calculateLocalDensity(std::vector<KDNode> &nd, KDTree &lp,
     for (unsigned int j = 0; j < found_size; j++) {
       if (distance(nd[i].data, found[j].data) < delta_c) {
         nd[i].data.rho += (nd[i].data.detid == found[j].data.detid ? 1. : 0.5) * found[j].data.weight;
+        //nd[i].data.rho += found[j].data.weight;
+
         maxdensity = std::max(maxdensity, nd[i].data.rho);
       }
     }  // end loop found
@@ -416,9 +446,6 @@ int HGCalCLUEAlgo::findAndAssignClusters(std::vector<KDNode> &nd, KDTree &lp, do
       }
     }
   }
-  for(unsigned i=0; i<nd_size; ++i)
-      std::cout << "Hexel N: " << i << " | clusterIndex: " << nd[i].data.clusterIndex << " | Delta: " << nd[i].data.delta << " | NearestHigher: " << nd[i].data.nearestHigher << " | Density: " << nd[i].data.rho << std::endl;
-    
 
   // prepare the offset for the next layer if there is one
   if (verbosity_ < pINFO) {
@@ -470,189 +497,195 @@ Density HGCalCLUEAlgo::getDensity() {
   return density_;
 }
 
+
+
 double HGCalCLUEAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const {
-    double maxdensity = 0.0;
-    float delta_c; // maximum search distance (critical distance) for local
-    // density calculation
+  double maxdensity = 0.0;
+  float delta_c; // maximum search distance (critical distance) for local
+                 // density calculation
+
+  if (layer <= lastLayerEE)
+    delta_c = vecDeltas_[0];
+  else if (layer <= lastLayerFH)
+    delta_c = vecDeltas_[1];
+  else
+    delta_c = vecDeltas_[2];
+  
+  // for each hit calculate local density rho and store it
+  // std::cout << std::endl;
+  // std::cout << "--- rho of BinCPU ---" << std::endl;
+
+  for(unsigned int i = 0; i < hits.size(); i++) {
+
+    //std::cout << "Calculate this hit at bin " << hist.getBinIdx(hits[i].x, hits[i].y) << std::endl;
+
+    std::array<int,4> search_box = hist.searchBox(hits[i].x - delta_c, hits[i].x + delta_c, hits[i].y - delta_c, hits[i].y + delta_c);
     
-    if (layer <= lastLayerEE)
-        delta_c = vecDeltas_[0];
-    else if (layer <= lastLayerFH)
-        delta_c = vecDeltas_[1];
-    else
-        delta_c = vecDeltas_[2];
-    
-    // for each hit calculate local density rho and store it
-    // std::cout << std::endl;
-    // std::cout << "--- rho of BinCPU ---" << std::endl;
-    
-    for(unsigned int i = 0; i < hits.size(); i++) {
+    //std::cout << " and search_box is " << search_box[0] << " " << search_box[1] << " " << search_box[2] << " " << search_box[3] << std::endl;
+    for(int xBin = search_box[0]; xBin < search_box[1]+1; ++xBin) {
+      for(int yBin = search_box[2]; yBin < search_box[3]+1; ++yBin) {
         
-        //std::cout << "Calculate this hit at bin " << hist.getBinIdx(hits[i].x, hits[i].y) << std::endl;
+        //int binId = hist.getBinIdx(hits[i].x,hits[i].y);
+        int binId = hist.getBinIdx_byBins(xBin,yBin);
+        //std::cout << "  neighbor bin"<< binId << std::endl;
+        size_t binSize = hist.data_[binId].size();
         
-        std::array<int,4> search_box = hist.searchBox(hits[i].x - delta_c, hits[i].x + delta_c, hits[i].y - delta_c, hits[i].y + delta_c);
-        
-        //std::cout << " and search_box is " << search_box[0] << " " << search_box[1] << " " << search_box[2] << " " << search_box[3] << std::endl;
-        for(int xBin = search_box[0]; xBin < search_box[1]+1; ++xBin) {
-            for(int yBin = search_box[2]; yBin < search_box[3]+1; ++yBin) {
-                
-                //int binId = hist.getBinIdx(hits[i].x,hits[i].y);
-                int binId = hist.getBinIdx_byBins(xBin,yBin);
-                //std::cout << "  neighbor bin"<< binId << std::endl;
-                size_t binSize = hist.data_[binId].size();
-                
-                for (unsigned int j = 0; j < binSize; j++) {
-                    int idTwo = hist.data_[binId][j];
-                    if(distanceGPU(hits[i],hits[idTwo]) < delta_c) {
-                        hits[i].rho += hits[idTwo].weight;
-                        maxdensity = std::max(maxdensity,hits[i].rho);
-                    }
-                }
-            }
+        for (unsigned int j = 0; j < binSize; j++) {
+          unsigned int idTwo = hist.data_[binId][j];
+          if(distanceGPU(hits[i],hits[idTwo]) < delta_c) {
+            hits[i].rho += (i == idTwo ? 1. : 0.5) * hits[idTwo].weight;
+            maxdensity = std::max(maxdensity,hits[i].rho);
+          }
         }
-    }
-    
-    return maxdensity;
+      }
+    }    
+  }
+
+  return maxdensity;
 }
 
 double HGCalCLUEAlgo::calculateDistanceToHigher_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const {
-    float maxDelta = 2000.0;
+
+
+  float delta_c; 
+  if (layer <= lastLayerEE)
+    delta_c = vecDeltas_[0];
+  else if (layer <= lastLayerFH)
+    delta_c = vecDeltas_[1];
+  else 
+    delta_c = vecDeltas_[2];
+  
+
+
+  for(unsigned int i = 0; i < hits.size(); i++) {
+    // initialize delta and nearest higer for i
+    float i_delta = maxDelta_;
+    int i_nearestHigher = -1;
+
+    // get search box for ith hit
+    // garrantee to cover "outlierDeltaFactor_*delta_c"
+    std::array<int,4> search_box = hist.searchBox(hits[i].x - outlierDeltaFactor_*delta_c, hits[i].x + outlierDeltaFactor_*delta_c, hits[i].y - outlierDeltaFactor_*delta_c, hits[i].y + outlierDeltaFactor_*delta_c);
     
-    float delta_c;
-    if (layer <= lastLayerEE)
-        delta_c = vecDeltas_[0];
-    else if (layer <= lastLayerFH)
-        delta_c = vecDeltas_[1];
-    else
-        delta_c = vecDeltas_[2];
-    
-    
-    
-    for(unsigned int i = 0; i < hits.size(); i++) {
-        // initialize delta and nearest higer for i
-        float i_delta = maxDelta;
-        int i_nearestHigher = -1;
+    // loop over all bins in the search box
+    for(int xBin = search_box[0]; xBin < search_box[1]+1; ++xBin) {
+      for(int yBin = search_box[2]; yBin < search_box[3]+1; ++yBin) {
         
-        // get search box for ith hit
-        // garrantee to cover "outlierDeltaFactor_*delta_c"
-        std::array<int,4> search_box = hist.searchBox(hits[i].x - outlierDeltaFactor_*delta_c, hits[i].x + outlierDeltaFactor_*delta_c, hits[i].y - outlierDeltaFactor_*delta_c, hits[i].y + outlierDeltaFactor_*delta_c);
-        
-        // loop over all bins in the search box
-        for(int xBin = search_box[0]; xBin < search_box[1]+1; ++xBin) {
-            for(int yBin = search_box[2]; yBin < search_box[3]+1; ++yBin) {
-                
-                // get the id of this bin
-                size_t binId = hist.getBinIdx_byBins(xBin,yBin);
-                // get the size of this bin
-                size_t binSize = hist.data_[binId].size();
-                
-                // loop over all hits in this bin
-                for (unsigned int j = 0; j < binSize; j++) {
-                    int idTwo = hist.data_[binId][j];
-                    
-                    float dist = distanceGPU(hits[i],hits[idTwo]);
-                    bool foundHigher = hits[idTwo].rho > hits[i].rho;
-                    
-                    if(dist < i_delta  &&  foundHigher) {
-                        // update i_delta
-                        i_delta = dist;
-                        // update i_nearestHigher
-                        i_nearestHigher = idTwo;
-                    }
-                }
-            }
+        // get the id of this bin
+        size_t binId = hist.getBinIdx_byBins(xBin,yBin);
+        // get the size of this bin
+        size_t binSize = hist.data_[binId].size();
+
+        // loop over all hits in this bin
+        for (unsigned int j = 0; j < binSize; j++) {
+          int idTwo = hist.data_[binId][j];
+
+          float dist = distanceGPU(hits[i],hits[idTwo]);
+          bool foundHigher = hits[idTwo].rho > hits[i].rho;
+
+
+          // if dist == i_delta, then last comer being the nearest higher
+          if(foundHigher && dist <= i_delta) {
+
+            // update i_delta
+            i_delta = dist;
+            // update i_nearestHigher
+            i_nearestHigher = idTwo;
+            
+          }
         }
-        
-        bool foundNearestHigherInSearchBox = (i_delta != maxDelta);
-        //if (i_delta <= outlierDeltaFactor_*delta_c){
-        if (foundNearestHigherInSearchBox){
-            // pass i_delta and i_nearestHigher to ith hit
-            hits[i].delta = i_delta;
-            hits[i].nearestHigher = i_nearestHigher;
-        } else {
-            // otherwise delta is garanteed to be larger outlierDeltaFactor_*delta_c
-            // we can safely maximize delta to be maxDelta
-            hits[i].delta = maxDelta;
-            hits[i].nearestHigher = -1;
-        }
+      }
     }
-    
-    return maxDelta;
+
+    bool foundNearestHigherInSearchBox = (i_delta != maxDelta_);
+    //if (i_delta <= outlierDeltaFactor_*delta_c){
+    if (foundNearestHigherInSearchBox){
+      // pass i_delta and i_nearestHigher to ith hit
+      hits[i].delta = i_delta;
+      hits[i].nearestHigher = i_nearestHigher;
+    } else {
+      // otherwise delta is garanteed to be larger outlierDeltaFactor_*delta_c
+      // we can safely maximize delta to be maxDelta
+      hits[i].delta = maxDelta_;
+      hits[i].nearestHigher = -1;
+    }
+  }
+
+  return maxDelta_;
 }
 
 
 int HGCalCLUEAlgo::findAndAssignClusters_BinCPU( LayerRecHitsGPU &hits, const unsigned int layer ) const {
+
+  // this is called once per layer and endcap...
+  // so when filling the cluster temporary vector of Hexels we resize each time
+  // by the number  of clusters found. This is always equal to the number of
+  // cluster centers...
+
+  //const int maxNFollower = 20;
+  unsigned int nClustersOnLayer = 0;
+
+  // buffer for index of hits, 
+  // which has clusterIndex 
+  // but have not pass clusterIndex to their followers
+  std::queue<int> buffer; 
+
+  // GPU::VecArray<int,maxNFollower> *followers;
+  // followers = (GPU::VecArray<int,maxNFollower>*) malloc( hits.size() * sizeof(GPU::VecArray<int,maxNFollower>) );
+
+
+  float delta_c; // critical distance
+  if (layer <= lastLayerEE)
+    delta_c = vecDeltas_[0];
+  else if (layer <= lastLayerFH)
+    delta_c = vecDeltas_[1];
+  else
+    delta_c = vecDeltas_[2];
+
+  // find cluster seeds and outlier  
+  for(unsigned int i = 0; i < hits.size(); i++) {
+
+    float rho_c = kappa_ * hits[i].sigmaNoise;
     
-    // this is called once per layer and endcap...
-    // so when filling the cluster temporary vector of Hexels we resize each time
-    // by the number  of clusters found. This is always equal to the number of
-    // cluster centers...
+    // initialize clusterIndex
+    hits[i].clusterIndex = -1;
+
+    bool isSeed = (hits[i].delta > delta_c) && (hits[i].rho >= rho_c);
+    bool isOutlier = (hits[i].delta > outlierDeltaFactor_*delta_c) && (hits[i].rho < rho_c);
+
+    if (isSeed) {
+      // hits[i] is a seed
+      hits[i].clusterIndex = nClustersOnLayer;
+      nClustersOnLayer++;
+      // add hits[i] into buffer
+      buffer.push(i);
     
-    //const int maxNFollower = 20;
-    unsigned int nClustersOnLayer = 0;
+    } else if (!isOutlier) {
+      hits[hits[i].nearestHigher].followers.push_back_unsafe(i);   
+      //followers[ hits[i].nearestHigher ].push_back_unsafe(i); 
+    } 
     
-    // buffer for index of hits,
-    // which has clusterIndex
-    // but have not pass clusterIndex to their followers
-    std::queue<int> buffer;
-    
-    // GPU::VecArray<int,maxNFollower> *followers;
-    // followers = (GPU::VecArray<int,maxNFollower>*) malloc( hits.size() * sizeof(GPU::VecArray<int,maxNFollower>) );
-    
-    
-    float delta_c; // critical distance
-    if (layer <= lastLayerEE)
-        delta_c = vecDeltas_[0];
-    else if (layer <= lastLayerFH)
-        delta_c = vecDeltas_[1];
-    else
-        delta_c = vecDeltas_[2];
-    
-    // find cluster seeds and outlier
-    for(unsigned int i = 0; i < hits.size(); i++) {
-        
-        float rho_c = kappa_ * hits[i].sigmaNoise;
-        
-        // initialize clusterIndex
-        hits[i].clusterIndex = -1;
-        
-        bool isSeed = (hits[i].delta > delta_c) && (hits[i].rho >= rho_c);
-        bool isOutlier = (hits[i].delta > outlierDeltaFactor_*delta_c) && (hits[i].rho < rho_c);
-        
-        if (isSeed) {
-            // hits[i] is a seed
-            hits[i].clusterIndex = nClustersOnLayer;
-            nClustersOnLayer++;
-            // add hits[i] into buffer
-            buffer.push(i);
-            
-        } else if (!isOutlier) {
-            hits[hits[i].nearestHigher].followers.push_back_unsafe(i);
-            //followers[ hits[i].nearestHigher ].push_back_unsafe(i);
-        }
-        
+  }
+
+  // hits in buffer, need to pass clusterIndex to their followers
+  while (!buffer.empty()) {
+    int frontOfBuffer = buffer.front();
+    RecHitGPU thisHit = hits[frontOfBuffer];
+
+    // auto thisHit_followers = hits[frontOfBuffer].followers;
+    //GPU::VecArray<int,maxNFollower> thisHit_followers = followers[frontOfBuffer];
+
+    buffer.pop();
+
+
+    // loop over followers
+    for( int j=0; j < thisHit.followers.size(); j++ ){
+      // pass id to a follower
+      hits[thisHit.followers[j]].clusterIndex = thisHit.clusterIndex;
+      // push this follower to buffer
+      buffer.push(thisHit.followers[j]);
     }
     
-    // hits in buffer, need to pass clusterIndex to their followers
-    while (!buffer.empty()) {
-        int frontOfBuffer = buffer.front();
-        RecHitGPU thisHit = hits[frontOfBuffer];
-        
-        // auto thisHit_followers = hits[frontOfBuffer].followers;
-        //GPU::VecArray<int,maxNFollower> thisHit_followers = followers[frontOfBuffer];
-        
-        buffer.pop();
-        
-        
-        // loop over followers
-        for( int j=0; j < thisHit.followers.size(); j++ ){
-            // pass id to a follower
-            hits[thisHit.followers[j]].clusterIndex = thisHit.clusterIndex;
-            // push this follower to buffer
-            buffer.push(thisHit.followers[j]);
-        }
-        
-    }
-    
-    return nClustersOnLayer;
+  }
+  
+  return nClustersOnLayer;
 }

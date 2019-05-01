@@ -164,6 +164,8 @@ class HGCalCLUEAlgo : public HGCalClusteringAlgoBase {
   // initialization bool
   bool initialized_;
 
+  float maxDelta_ = 1000.0;
+
   struct Hexel {
     double x;
     double y;
@@ -275,5 +277,10 @@ class HGCalCLUEAlgo : public HGCalClusteringAlgoBase {
   HgcRecHitsGPU recHitsGPU;
 
 };
+
+
+namespace HGCalRecAlgos {
+  double clue_BinGPU(const BinnerGPU::Histo2D &theHist, LayerRecHitsGPU &theHits, const unsigned int layer, std::vector<double> vecDeltas_, float, float);
+}
 
 #endif
