@@ -223,7 +223,7 @@ namespace HGCalRecAlgos{
     double maxdensity = 0.;
     float delta_c;
 
-    std::cout<< "Layer " << layer <<std::endl;
+    //std::cout<< "Layer " << layer <<std::endl;
     
 
     // maximum search distance (critical distance) for local density calculation
