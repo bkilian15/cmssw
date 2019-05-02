@@ -28,8 +28,8 @@ namespace BinnerGPU {
   float minPhi = -M_PI;
   float maxPhi = M_PI;
 
-  float minX = -300.0, minY = -300.0;
-  float maxX = 300.0, maxY = 300.0;
+  float minX = -250.0, minY = -250.0;
+  float maxX = 250.0, maxY = 250.0;
 
   Histo2D computeBins(std::vector<RecHitGPU> layerData) {
     Histo2D hOutputData(minX, maxX, minY, maxY);

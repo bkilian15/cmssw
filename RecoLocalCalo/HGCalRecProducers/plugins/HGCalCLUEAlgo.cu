@@ -3,6 +3,7 @@
 //GPU Add
 #include "RecoLocalCalo/HGCalRecProducers/interface/BinnerGPU.h"
 #include <math.h>
+#include <chrono>
 
 using namespace BinnerGPU;
 
@@ -12,8 +13,8 @@ namespace HGCalRecAlgos{
   static const unsigned int lastLayerEE = 28;
   static const unsigned int lastLayerFH = 40;
   static const float maxDelta = 1000.0; 
-  static const unsigned int maxNSeeds = 200; 
-  static const unsigned int BufferSizePerSeed = 20; 
+  static const unsigned int maxNSeeds = 1024; 
+  static const unsigned int BufferSizePerSeed = 40; 
 
 
 
@@ -32,8 +33,7 @@ namespace HGCalRecAlgos{
                                           int theHitsSize
                                           ) {
 
-    size_t idOne = threadIdx.x;
-    // int temp = theHist->getBinIdx_byBins(1,1);
+    size_t idOne = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idOne < theHitsSize){
 
@@ -73,7 +73,7 @@ namespace HGCalRecAlgos{
                                                   float outlierDeltaFactor_
                                                   ) {
 
-    size_t idOne = threadIdx.x;
+    size_t idOne = blockIdx.x * blockDim.x + threadIdx.x;
     // int temp = theHist->getBinIdx_byBins(1,1);
 
     if (idOne < theHitsSize){
@@ -101,8 +101,6 @@ namespace HGCalRecAlgos{
           // loop over all hits in this bin
           for (unsigned int j = 0; j < binSize; j++) {
             int idTwo = (theHist->data_[binIndex])[j];
-            if (idOne == 21) printf("GPU Rechits 21 found %d \n", idTwo);
-            
 
             float distance = sqrt(distance2GPU(theHits[idOne], theHits[idTwo]));
             bool foundHigher = theHits[idTwo].rho > theHits[idOne].rho;
@@ -140,7 +138,7 @@ namespace HGCalRecAlgos{
                                         float outlierDeltaFactor_
                                         ) {
 
-    size_t idOne = threadIdx.x;
+    size_t idOne = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idOne < theHitsSize){
 
@@ -170,7 +168,7 @@ namespace HGCalRecAlgos{
 
   __global__ void kernel_assign_clusters( RecHitGPU* theHits, GPU::VecArray<int,maxNSeeds>* seeds ) {
 
-    unsigned int idOne = threadIdx.x;
+    unsigned int idOne = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned int nClusters = seeds[0].size();
 
     if (idOne < nClusters){
@@ -223,7 +221,7 @@ namespace HGCalRecAlgos{
     double maxdensity = 0.;
     float delta_c;
 
-    //std::cout<< "Layer " << layer <<std::endl;
+    // auto start = std::chrono::high_resolution_clock::now();
     
 
     // maximum search distance (critical distance) for local density calculation
@@ -263,7 +261,7 @@ namespace HGCalRecAlgos{
     
     // Call the kernel
     const dim3 blockSize(1024,1,1);
-    const dim3 gridSize(1,1,1);
+    const dim3 gridSize(ceil(theHits.size()/1024.0),1,1);
 
     kernel_compute_density <<<gridSize,blockSize>>>(dInputHist, dInputRecHits, 
                                                     delta_c, 
@@ -282,8 +280,10 @@ namespace HGCalRecAlgos{
                                                   kappa_, 
                                                   outlierDeltaFactor_
                                                   );
-                                                  
-    kernel_assign_clusters <<<gridSize,blockSize>>>(dInputRecHits, dSeeds);
+
+    const dim3 blockSize_assign_clusters(maxNSeeds,1,1);                                              
+    const dim3 gridSize_assign_clusters(1,1,1);
+    kernel_assign_clusters <<<gridSize_assign_clusters,blockSize_assign_clusters>>>(dInputRecHits, dSeeds);
 
     // Copy result back!/
     cudaMemcpy(hInputRecHits, dInputRecHits, sizeof(RecHitGPU)*theHits.size(), cudaMemcpyDeviceToHost);

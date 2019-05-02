@@ -44,8 +44,8 @@ namespace BinnerGPU {
     // 1.4/0.05 = 28
     // 20 (as heuristic)
 
-const int X_BINS=60;
-const int Y_BINS=60;
+const int X_BINS=100;
+const int Y_BINS=100;
 const int MAX_DEPTH=40;
 
 typedef histogram2D<int, X_BINS, Y_BINS, MAX_DEPTH> Histo2D;

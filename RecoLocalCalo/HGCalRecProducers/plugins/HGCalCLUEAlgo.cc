@@ -138,33 +138,36 @@ void HGCalCLUEAlgo::makeClusters() {
                                      ? (i - (maxlayer + 1))
                                      : i;  // maps back from index used for KD trees to actual layer
 
-      std::cout << "layer = " << actualLayer << std::endl;
+      std::cout << "layer = " << actualLayer << ", nhits = " << points_[i].size() << std::endl;
+      
 
-      double maxdensity = calculateLocalDensity(points_[i], hit_kdtree,
-                                                actualLayer);  // also stores rho (energy
-                                                               // density) for each point (node)
-      // calculate distance to nearest point with higher density storing
-      // distance (delta) and point's index
+      // kdtree
+      start = std::chrono::high_resolution_clock::now();
+      double maxdensity = calculateLocalDensity(points_[i], hit_kdtree,actualLayer);
       calculateDistanceToHigher(points_[i]);
-      findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds, actualLayer,
-                            layerClustersPerLayer_[i]);
+      findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds, actualLayer,layerClustersPerLayer_[i]);
+      finish = std::chrono::high_resolution_clock::now();
+      std::cout << "KDTree time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
 
-      for(unsigned j=0; j<points_[i].size(); ++j){
-        auto temp = points_[i][j].data;
-        std::cout << "KDTree Hexel: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << std::endl;
-        kdtFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
-      }
+      // for(unsigned j=0; j<points_[i].size(); ++j){
+      //   auto temp = points_[i][j].data;
+      //   std::cout << "KDTree Hexel: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << std::endl;
+      //   kdtFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
+      // }
 
         
       // Bin CPU
+      start = std::chrono::high_resolution_clock::now();
       calculateLocalDensity_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
       calculateDistanceToHigher_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
       findAndAssignClusters_BinCPU(recHitsGPU[i], actualLayer);
+      finish = std::chrono::high_resolution_clock::now();
+      std::cout << "BinCPU time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
 
       for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
-        auto temp = recHitsGPU[i][j];
-        std::cout << "CPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
-        cpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
+        //auto temp = recHitsGPU[i][j];
+        //std::cout << "CPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
+        //cpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
         
         recHitsGPU[i][j].rho = 0;
         recHitsGPU[i][j].delta = 0;
@@ -175,12 +178,18 @@ void HGCalCLUEAlgo::makeClusters() {
 
 
       // Bin GPU
+      start = std::chrono::high_resolution_clock::now();
       HGCalRecAlgos::clue_BinGPU(histosGPU[i], recHitsGPU[i], actualLayer, vecDeltas_, kappa_, outlierDeltaFactor_);
-      for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
-        auto temp = recHitsGPU[i][j];
-        std::cout << "GPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
-        gpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
-      }
+      finish = std::chrono::high_resolution_clock::now();
+      std::cout << "BinGPU time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
+
+      // for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
+      //   auto temp = recHitsGPU[i][j];
+      //   std::cout << "GPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
+      //   gpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
+      // }
+      
 
     });
   });
@@ -295,6 +304,9 @@ math::XYZPoint HGCalCLUEAlgo::calculatePosition(const std::vector<KDNode> &v) co
 
 double HGCalCLUEAlgo::calculateLocalDensity(std::vector<KDNode> &nd, KDTree &lp,
                                             const unsigned int layer) const {
+
+  auto start = std::chrono::high_resolution_clock::now();
+
   double maxdensity = 0.;
   float delta_c;  // maximum search distance (critical distance) for local
                   // density calculation
@@ -322,10 +334,17 @@ double HGCalCLUEAlgo::calculateLocalDensity(std::vector<KDNode> &nd, KDTree &lp,
       }
     }  // end loop found
   }    // end loop nodes
+
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "--KDTree time 1 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
   return maxdensity;
 }
 
 double HGCalCLUEAlgo::calculateDistanceToHigher(std::vector<KDNode> &nd) const {
+
+  auto start = std::chrono::high_resolution_clock::now();
+
   // sort vector of Hexels by decreasing local density
   std::vector<size_t> &&rs = sorted_indices(nd);
 
@@ -370,16 +389,20 @@ double HGCalCLUEAlgo::calculateDistanceToHigher(std::vector<KDNode> &nd) const {
     nd[i].data.delta = std::sqrt(dist2);
     nd[i].data.nearestHigher = nearestHigher;  // this uses the original unsorted hitlist
   }
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "--KDTree time 2 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
   return maxdensity;
 }
 int HGCalCLUEAlgo::findAndAssignClusters(std::vector<KDNode> &nd, KDTree &lp, double maxdensity,
                                          KDTreeBox &bounds, const unsigned int layer,
                                          std::vector<std::vector<KDNode>> &clustersOnLayer) const {
+  auto start = std::chrono::high_resolution_clock::now();
   // this is called once per layer and endcap...
   // so when filling the cluster temporary vector of Hexels we resize each time
   // by the number  of clusters found. This is always equal to the number of
   // cluster centers...
-
+  
   unsigned int nClustersOnLayer = 0;
   float delta_c;  // critical distance
   if (layer <= lastLayerEE)
@@ -451,6 +474,9 @@ int HGCalCLUEAlgo::findAndAssignClusters(std::vector<KDNode> &nd, KDTree &lp, do
   if (verbosity_ < pINFO) {
     LogDebug("HGCalCLUEAlgo") << "moving cluster offset by " << nClustersOnLayer << std::endl;
   }
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "--KDTree time 3 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
   return nClustersOnLayer;
 }
 
@@ -500,6 +526,8 @@ Density HGCalCLUEAlgo::getDensity() {
 
 
 double HGCalCLUEAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const {
+  auto start = std::chrono::high_resolution_clock::now();
+
   double maxdensity = 0.0;
   float delta_c; // maximum search distance (critical distance) for local
                  // density calculation
@@ -511,9 +539,6 @@ double HGCalCLUEAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU
   else
     delta_c = vecDeltas_[2];
   
-  // for each hit calculate local density rho and store it
-  // std::cout << std::endl;
-  // std::cout << "--- rho of BinCPU ---" << std::endl;
 
   for(unsigned int i = 0; i < hits.size(); i++) {
 
@@ -540,12 +565,15 @@ double HGCalCLUEAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU
       }
     }    
   }
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "--BinCPU time 1 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
 
   return maxdensity;
 }
 
 double HGCalCLUEAlgo::calculateDistanceToHigher_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const {
-
+  auto start = std::chrono::high_resolution_clock::now();
 
   float delta_c; 
   if (layer <= lastLayerEE)
@@ -609,13 +637,15 @@ double HGCalCLUEAlgo::calculateDistanceToHigher_BinCPU(Histo2D hist, LayerRecHit
       hits[i].nearestHigher = -1;
     }
   }
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "--BinCPU time 2 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
 
   return maxDelta_;
 }
 
 
 int HGCalCLUEAlgo::findAndAssignClusters_BinCPU( LayerRecHitsGPU &hits, const unsigned int layer ) const {
-
+  auto start = std::chrono::high_resolution_clock::now();
   // this is called once per layer and endcap...
   // so when filling the cluster temporary vector of Hexels we resize each time
   // by the number  of clusters found. This is always equal to the number of
@@ -686,6 +716,7 @@ int HGCalCLUEAlgo::findAndAssignClusters_BinCPU( LayerRecHitsGPU &hits, const un
     }
     
   }
-  
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "--BinCPU time 3 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
   return nClustersOnLayer;
 }
