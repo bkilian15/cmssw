@@ -280,7 +280,7 @@ class HGCalCLUEAlgo : public HGCalClusteringAlgoBase {
 
 
 namespace HGCalRecAlgos {
-  double clue_BinGPU(const BinnerGPU::Histo2D &theHist, LayerRecHitsGPU &theHits, const unsigned int layer, std::vector<double> vecDeltas_, float, float);
+  double clue_BinGPU(LayerRecHitsGPU &theHits, const unsigned int layer, std::vector<double> vecDeltas_, float, float);
 }
 
 #endif

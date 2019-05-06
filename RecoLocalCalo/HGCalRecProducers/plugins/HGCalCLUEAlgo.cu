@@ -26,6 +26,19 @@ namespace HGCalRecAlgos{
     return (dx*dx + dy*dy);
   } 
 
+  __global__ void kernel_compute_histogram(Histo2D *dOutputData, RecHitGPU *dInputData,  const size_t numRechits) {
+
+    size_t rechitLocation = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if(rechitLocation >= numRechits)
+        return;
+
+    float x = dInputData[rechitLocation].x;
+    float y = dInputData[rechitLocation].y;
+   
+    dOutputData->fillBinGPU(x, y, rechitLocation);
+
+  }
 
 
   __global__ void kernel_compute_density( Histo2D* theHist, RecHitGPU* theHits, 
@@ -212,7 +225,7 @@ namespace HGCalRecAlgos{
 
 
 
-  double clue_BinGPU( const BinnerGPU::Histo2D& theHist, LayerRecHitsGPU& theHits, 
+  double clue_BinGPU( LayerRecHitsGPU& theHits, 
                       const unsigned int layer,
                       std::vector<double> vecDeltas_, 
                       float kappa_, 
@@ -233,42 +246,42 @@ namespace HGCalRecAlgos{
     else
       delta_c = vecDeltas_[2];
 
+
+    
+    // make input hits for GPU
     RecHitGPU *hInputRecHits;
     hInputRecHits = theHits.data();
-    
-
-    Histo2D *dInputHist;
-    RecHitGPU *dInputRecHits;  // make input hits for GPU
-
-
-    int numBins = theHist.data_.size();
-
-    cudaMalloc(&dInputHist, sizeof(Histo2D));
+    RecHitGPU *dInputRecHits; 
     cudaMalloc(&dInputRecHits, sizeof(RecHitGPU)*theHits.size());
-
-    cudaMemcpy(dInputHist, &theHist, sizeof(Histo2D), cudaMemcpyHostToDevice);
     cudaMemcpy(dInputRecHits, hInputRecHits, sizeof(RecHitGPU)*theHits.size(), cudaMemcpyHostToDevice);
     
+    // histogram
+    float minX = -250.0, minY = -250.0;
+    float maxX =  250.0, maxY =  250.0;
+    Histo2D hHist(minX, maxX, minY, maxY);
+    Histo2D *dHist;
+    cudaMalloc(&dHist, sizeof(Histo2D));
+    cudaMemcpy(dHist, &hHist, sizeof(Histo2D), cudaMemcpyHostToDevice);
 
-
-    // define GPU vecArray
+    // define dSeeds as GPU vecArray
     GPU::VecArray<int,maxNSeeds> *dSeeds;
-    //GPU::VecArray<int,maxNFollowers> *dFollowers;
     cudaMalloc(&dSeeds, sizeof(GPU::VecArray<int,maxNSeeds>));
     cudaMemset(dSeeds, 0x00, sizeof(GPU::VecArray<int,maxNSeeds>));
-    //cudaMalloc(&dFollowers, sizeof(GPU::VecArray<int,maxNFollowers>) * theHits.size());
     
     
     // Call the kernel
     const dim3 blockSize(1024,1,1);
     const dim3 gridSize(ceil(theHits.size()/1024.0),1,1);
 
-    kernel_compute_density <<<gridSize,blockSize>>>(dInputHist, dInputRecHits, 
+    kernel_compute_histogram <<<gridSize,blockSize>>>(dHist, dInputRecHits,  theHits.size());
+
+
+    kernel_compute_density <<<gridSize,blockSize>>>(dHist, dInputRecHits, 
                                                     delta_c, 
                                                     theHits.size()
                                                     );
 
-    kernel_compute_distanceToHigher <<<gridSize,blockSize>>>( dInputHist, dInputRecHits, 
+    kernel_compute_distanceToHigher <<<gridSize,blockSize>>>( dHist, dInputRecHits, 
                                                               delta_c, 
                                                               theHits.size(), 
                                                               outlierDeltaFactor_
@@ -290,8 +303,9 @@ namespace HGCalRecAlgos{
 
 
     // Free all the memory
-    cudaFree(dInputHist);
     cudaFree(dInputRecHits);
+
+    cudaFree(dHist);
     cudaFree(dSeeds);
     
     for(unsigned int j = 0; j< theHits.size(); j++) {
@@ -308,4 +322,3 @@ namespace HGCalRecAlgos{
 
 
 }//namespace
-

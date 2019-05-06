@@ -27,11 +27,11 @@ using namespace hgcal_clustering;
 void HGCalCLUEAlgo::populate(const HGCRecHitCollection &hits) {
   // loop over all hits and create the Hexel structure, skip energies below ecut
 
-  if (dependSensor_) {
-    // for each layer and wafer calculate the thresholds (sigmaNoise and energy)
-    // once
-    computeThreshold();
-  }
+
+  // for each layer and wafer calculate the thresholds (sigmaNoise and energy)
+  // once
+  computeThreshold();
+
 
   std::vector<bool> firstHit(2 * (maxlayer + 1), true);
   std::vector<unsigned int> layerCounters(2 * (maxlayer + 1),0);
@@ -44,47 +44,38 @@ void HGCalCLUEAlgo::populate(const HGCRecHitCollection &hits) {
     // set sigmaNoise default value 1 to use kappa value directly in case of
     // sensor-independent thresholds
     float sigmaNoise = 1.f;
-    if (dependSensor_) {
-      thickness = rhtools_.getSiThickness(detid);
-      int thickness_index = rhtools_.getSiThickIndex(detid);
-      if (thickness_index == -1) thickness_index = 3;
-      double storedThreshold = thresholds_[layer - 1][thickness_index];
-      sigmaNoise = v_sigmaNoise_[layer - 1][thickness_index];
 
-      if (hgrh.energy() < storedThreshold)
-        continue;  // this sets the ZS threshold at ecut times the sigma noise
-                   // for the sensor
-    }
-    if (!dependSensor_ && hgrh.energy() < ecut_) continue;
+    thickness = rhtools_.getSiThickness(detid);
+    int thickness_index = rhtools_.getSiThickIndex(detid);
+    if (thickness_index == -1) thickness_index = 3;
+    double storedThreshold = thresholds_[layer - 1][thickness_index];
+    sigmaNoise = v_sigmaNoise_[layer - 1][thickness_index];
+
+    if (hgrh.energy() < storedThreshold)
+      continue;  // this sets the ZS threshold at ecut times the sigma noise
+                  // for the sensor
+    
 
     // map layers from positive endcap (z) to layer + maxlayer+1 to prevent
     // mixing up hits from different sides
     layer += int(rhtools_.zside(detid) > 0) * (maxlayer + 1);
 
-    // determine whether this is a half-hexagon
-    bool isHalf = rhtools_.isHalfCell(detid);
+
     const GlobalPoint position(rhtools_.getPosition(detid));
 
+
+
+
+    // ------------------------------------
+    // MARK -- kdtree
+    // ------------------------------------
     // here's were the KDNode is passed its dims arguments - note that these are
     // *copied* from the Hexel
+    // determine whether this is a half-hexagon
+    bool isHalf = rhtools_.isHalfCell(detid);
     points_[layer].emplace_back(Hexel(hgrh, detid, isHalf, sigmaNoise, thickness, &rhtools_),
                                 position.x(), position.y());
 
-    RecHitGPU hit;
-    hit.index = layerCounters[layer];
-    hit.x = position.x();
-    hit.y = position.y();
-    hit.eta = std::fabs(position.eta());
-    hit.phi = position.phi();
-    hit.weight = hgrh.energy();
-    hit.rho = 0.0;
-    hit.sigmaNoise = sigmaNoise;
-      
-    recHitsGPU[layer].emplace_back(hit);;
-      
-    layerCounters[layer]++;
-
-      
     // for each layer, store the minimum and maximum x and y coordinates for the
     // KDTreeBox boundaries
     if (firstHit[layer]) {
@@ -99,6 +90,22 @@ void HGCalCLUEAlgo::populate(const HGCRecHitCollection &hits) {
       maxpos_[layer][0] = std::max((float)position.x(), maxpos_[layer][0]);
       maxpos_[layer][1] = std::max((float)position.y(), maxpos_[layer][1]);
     }
+
+    // // ------------------------------------
+    // // MARK -- bin cpu and gpu
+    // // ------------------------------------
+    // RecHitGPU hit;
+    // hit.index = layerCounters[layer];
+    // hit.x = position.x();
+    // hit.y = position.y();
+    // hit.eta = std::fabs(position.eta());
+    // hit.phi = position.phi();
+    // hit.weight = hgrh.energy();
+    // hit.rho = 0.0;
+    // hit.sigmaNoise = sigmaNoise;
+    // recHitsGPU[layer].emplace_back(hit);;
+    // layerCounters[layer]++;
+    // thickness++;
   }  // end loop hits
 }
 
@@ -106,98 +113,98 @@ void HGCalCLUEAlgo::populate(const HGCRecHitCollection &hits) {
 // HGCalRecHits - this can be used directly to make the final cluster list -
 // this method can be invoked multiple times for the same event with different
 // input (reset should be called between events)
+// start = std::chrono::high_resolution_clock::now();
+// finish = std::chrono::high_resolution_clock::now();
+// std::cout << "KDTree time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
+
+
 void HGCalCLUEAlgo::makeClusters() {
-    
-  std::cout << "- makeClusters() starts" << std::endl;
-  auto start = std::chrono::high_resolution_clock::now();
+  double timer0=0;
+  double timer1=0;
+  double timer2=0;
+  double timer3=0;
 
-  // For each layer, assign all RecHits to a bin of a Histo2D
-  std::vector< BinnerGPU::Histo2D > histosGPU;
-  for (auto&layer: recHitsGPU) {
-    histosGPU.push_back( BinnerGPU::computeBins(layer) );
-  }
-    
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = finish - start;
-  std::cout << "Elapsed time: " << elapsed.count() << " s\n";
-
-  std::ofstream kdtFile,cpuFile,gpuFile;
-  kdtFile.open ("kdtFile.csv");
-  cpuFile.open ("cpuFile.csv");
-  gpuFile.open ("gpuFile.csv");
-    
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core
   tbb::this_task_arena::isolate([&] {
     tbb::parallel_for(size_t(0), size_t(2 * maxlayer + 2), [&](size_t i) {
+
+      unsigned int actualLayer = i > maxlayer
+                                ? (i - (maxlayer + 1))
+                                : i;  // maps back from index used for KD trees to actual layer
+
+      // ------------------------------------
+      // MARK -- kdtree
+      // ------------------------------------
+      auto start = std::chrono::high_resolution_clock::now();
       KDTreeBox bounds(minpos_[i][0], maxpos_[i][0], minpos_[i][1], maxpos_[i][1]);
       KDTree hit_kdtree;
       hit_kdtree.build(points_[i], bounds);
+      auto finish = std::chrono::high_resolution_clock::now();
+      timer0 += (std::chrono::duration<double>(finish-start)).count();
 
-      unsigned int actualLayer = i > maxlayer
-                                     ? (i - (maxlayer + 1))
-                                     : i;  // maps back from index used for KD trees to actual layer
 
-      std::cout << "layer = " << actualLayer << ", nhits = " << points_[i].size() << std::endl;
-      
-
-      // kdtree
       start = std::chrono::high_resolution_clock::now();
       double maxdensity = calculateLocalDensity(points_[i], hit_kdtree,actualLayer);
+      finish = std::chrono::high_resolution_clock::now();
+      timer1 += (std::chrono::duration<double>(finish-start)).count();
+
+      start = std::chrono::high_resolution_clock::now();
       calculateDistanceToHigher(points_[i]);
+      finish = std::chrono::high_resolution_clock::now();
+      timer2 += (std::chrono::duration<double>(finish-start)).count();
+
+      start = std::chrono::high_resolution_clock::now();
       findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds, actualLayer,layerClustersPerLayer_[i]);
       finish = std::chrono::high_resolution_clock::now();
-      std::cout << "KDTree time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+      timer3 += (std::chrono::duration<double>(finish-start)).count();
 
-      // for(unsigned j=0; j<points_[i].size(); ++j){
-      //   auto temp = points_[i][j].data;
-      //   std::cout << "KDTree Hexel: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << std::endl;
-      //   kdtFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
-      // }
+      
+      // // ------------------------------------
+      // // MARK -- Bin CPU
+      // // ------------------------------------
+      // // For each layer, assign all RecHits to a bin of a Histo2D
+      // auto start = std::chrono::high_resolution_clock::now();
+      // Histo2D histo(-250.0, 250.0, -250.0, 250.0);
+      // for (unsigned int j=0; j<recHitsGPU[i].size(); j++) histo.fillBin(recHitsGPU[i][j].x, recHitsGPU[i][j].y, j);
+      // auto finish = std::chrono::high_resolution_clock::now();
+      // timer0 += (std::chrono::duration<double>(finish-start)).count();
 
-        
-      // Bin CPU
-      start = std::chrono::high_resolution_clock::now();
-      calculateLocalDensity_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
-      calculateDistanceToHigher_BinCPU(histosGPU[i], recHitsGPU[i], actualLayer);
-      findAndAssignClusters_BinCPU(recHitsGPU[i], actualLayer);
-      finish = std::chrono::high_resolution_clock::now();
-      std::cout << "BinCPU time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+      // start = std::chrono::high_resolution_clock::now();
+      // calculateLocalDensity_BinCPU(histo, recHitsGPU[i], actualLayer);
+      // finish = std::chrono::high_resolution_clock::now();
+      // timer1 += (std::chrono::duration<double>(finish-start)).count();
 
-      for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
-        //auto temp = recHitsGPU[i][j];
-        //std::cout << "CPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
-        //cpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
-        
-        recHitsGPU[i][j].rho = 0;
-        recHitsGPU[i][j].delta = 0;
-        recHitsGPU[i][j].nearestHigher = 0;
-        recHitsGPU[i][j].clusterIndex = 0 ;
-        recHitsGPU[i][j].followers.reset();
-      }
+      // start = std::chrono::high_resolution_clock::now();
+      // calculateDistanceToHigher_BinCPU(histo, recHitsGPU[i], actualLayer);
+      // finish = std::chrono::high_resolution_clock::now();
+      // timer2 += (std::chrono::duration<double>(finish-start)).count();
 
-
-      // Bin GPU
-      start = std::chrono::high_resolution_clock::now();
-      HGCalRecAlgos::clue_BinGPU(histosGPU[i], recHitsGPU[i], actualLayer, vecDeltas_, kappa_, outlierDeltaFactor_);
-      finish = std::chrono::high_resolution_clock::now();
-      std::cout << "BinGPU time ToT : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+      // start = std::chrono::high_resolution_clock::now();
+      // findAndAssignClusters_BinCPU(recHitsGPU[i], actualLayer);
+      // finish = std::chrono::high_resolution_clock::now();
+      // timer3 += (std::chrono::duration<double>(finish-start)).count();
 
 
+      // // ------------------------------------
+      // // MARK -- Bin GPU
+      // // ------------------------------------
+      // HGCalRecAlgos::clue_BinGPU(recHitsGPU[i], actualLayer, vecDeltas_, kappa_, outlierDeltaFactor_);
+
+      // // ------------------------------------
       // for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
       //   auto temp = recHitsGPU[i][j];
       //   std::cout << "GPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
-      //   gpuFile <<i<<"," <<j<<"," <<temp.x<<"," <<temp.y<<"," <<temp.rho<<"," <<temp.delta<<"," <<temp.nearestHigher<<"," <<temp.clusterIndex<<"\n";
       // }
-      
 
-    });
+    }); 
   });
   for(auto const& p: points_) { setDensity(p); }
-
-  kdtFile.close();
-  cpuFile.close();
-  gpuFile.close();
+  std::cout << "-- makeclus timer 0: " << timer0 << " s \n" ;
+  std::cout << "-- makeclus timer 1: " << timer1 << " s \n" ;
+  std::cout << "-- makeclus timer 2: " << timer2 << " s \n" ;
+  std::cout << "-- makeclus timer 3: " << timer3 << " s \n" ;
 
 }
 
@@ -305,8 +312,6 @@ math::XYZPoint HGCalCLUEAlgo::calculatePosition(const std::vector<KDNode> &v) co
 double HGCalCLUEAlgo::calculateLocalDensity(std::vector<KDNode> &nd, KDTree &lp,
                                             const unsigned int layer) const {
 
-  auto start = std::chrono::high_resolution_clock::now();
-
   double maxdensity = 0.;
   float delta_c;  // maximum search distance (critical distance) for local
                   // density calculation
@@ -335,15 +340,11 @@ double HGCalCLUEAlgo::calculateLocalDensity(std::vector<KDNode> &nd, KDTree &lp,
     }  // end loop found
   }    // end loop nodes
 
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "--KDTree time 1 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
 
   return maxdensity;
 }
 
 double HGCalCLUEAlgo::calculateDistanceToHigher(std::vector<KDNode> &nd) const {
-
-  auto start = std::chrono::high_resolution_clock::now();
 
   // sort vector of Hexels by decreasing local density
   std::vector<size_t> &&rs = sorted_indices(nd);
@@ -389,15 +390,13 @@ double HGCalCLUEAlgo::calculateDistanceToHigher(std::vector<KDNode> &nd) const {
     nd[i].data.delta = std::sqrt(dist2);
     nd[i].data.nearestHigher = nearestHigher;  // this uses the original unsorted hitlist
   }
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "--KDTree time 2 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
 
   return maxdensity;
 }
 int HGCalCLUEAlgo::findAndAssignClusters(std::vector<KDNode> &nd, KDTree &lp, double maxdensity,
                                          KDTreeBox &bounds, const unsigned int layer,
                                          std::vector<std::vector<KDNode>> &clustersOnLayer) const {
-  auto start = std::chrono::high_resolution_clock::now();
   // this is called once per layer and endcap...
   // so when filling the cluster temporary vector of Hexels we resize each time
   // by the number  of clusters found. This is always equal to the number of
@@ -474,8 +473,6 @@ int HGCalCLUEAlgo::findAndAssignClusters(std::vector<KDNode> &nd, KDTree &lp, do
   if (verbosity_ < pINFO) {
     LogDebug("HGCalCLUEAlgo") << "moving cluster offset by " << nClustersOnLayer << std::endl;
   }
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "--KDTree time 3 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
 
   return nClustersOnLayer;
 }
@@ -526,7 +523,6 @@ Density HGCalCLUEAlgo::getDensity() {
 
 
 double HGCalCLUEAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const {
-  auto start = std::chrono::high_resolution_clock::now();
 
   double maxdensity = 0.0;
   float delta_c; // maximum search distance (critical distance) for local
@@ -565,15 +561,11 @@ double HGCalCLUEAlgo::calculateLocalDensity_BinCPU(Histo2D hist, LayerRecHitsGPU
       }
     }    
   }
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "--BinCPU time 1 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
-
 
   return maxdensity;
 }
 
 double HGCalCLUEAlgo::calculateDistanceToHigher_BinCPU(Histo2D hist, LayerRecHitsGPU &hits, const unsigned int layer) const {
-  auto start = std::chrono::high_resolution_clock::now();
 
   float delta_c; 
   if (layer <= lastLayerEE)
@@ -637,15 +629,12 @@ double HGCalCLUEAlgo::calculateDistanceToHigher_BinCPU(Histo2D hist, LayerRecHit
       hits[i].nearestHigher = -1;
     }
   }
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "--BinCPU time 2 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
 
   return maxDelta_;
 }
 
 
 int HGCalCLUEAlgo::findAndAssignClusters_BinCPU( LayerRecHitsGPU &hits, const unsigned int layer ) const {
-  auto start = std::chrono::high_resolution_clock::now();
   // this is called once per layer and endcap...
   // so when filling the cluster temporary vector of Hexels we resize each time
   // by the number  of clusters found. This is always equal to the number of
@@ -716,7 +705,6 @@ int HGCalCLUEAlgo::findAndAssignClusters_BinCPU( LayerRecHitsGPU &hits, const un
     }
     
   }
-  auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "--BinCPU time 3 : " << (std::chrono::duration<double>(finish-start)).count() << " s \n" ;
+
   return nClustersOnLayer;
 }
