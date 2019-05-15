@@ -151,18 +151,18 @@ std::vector<reco::BasicCluster> HGCalImagingAlgo::getClusters(bool doSharing) {
             }
           }
 
-          if (verbosity_ < pINFO) {
-            std::cout << "\t******** NEW CLUSTER (SHARING) ********"
-                      << std::endl;
-            std::cout << "\tEff. No. of cells = " << effective_hits
-                      << std::endl;
-            std::cout << "\t     Energy       = " << energy << std::endl;
-            std::cout << "\t     Phi          = " << position.phi()
-                      << std::endl;
-            std::cout << "\t     Eta          = " << position.eta()
-                      << std::endl;
-            std::cout << "\t*****************************" << std::endl;
-          }
+          // if (verbosity_ < pINFO) {
+          //   std::cout << "\t******** NEW CLUSTER (SHARING) ********"
+          //             << std::endl;
+          //   std::cout << "\tEff. No. of cells = " << effective_hits
+          //             << std::endl;
+          //   std::cout << "\t     Energy       = " << energy << std::endl;
+          //   std::cout << "\t     Phi          = " << position.phi()
+          //             << std::endl;
+          //   std::cout << "\t     Eta          = " << position.eta()
+          //             << std::endl;
+          //   std::cout << "\t*****************************" << std::endl;
+          // }
           clusters_v_.emplace_back(energy, position, caloID, thisCluster,
                                   algoId_);
 	  if (!clusters_v_.empty()){ clusters_v_.back().setSeed( clsOnLayer[i][rsmax].data.detid); }
@@ -176,15 +176,15 @@ std::vector<reco::BasicCluster> HGCalImagingAlgo::getClusters(bool doSharing) {
           // use fraction to store whether this is a Halo hit or not
           thisCluster.emplace_back(it.data.detid, (it.data.isHalo ? 0.f : 1.f));
         }
-        if (verbosity_ < pINFO) {
-          std::cout << "******** NEW CLUSTER (HGCIA) ********" << std::endl;
-          std::cout << "Index          " << i << std::endl;
-          std::cout << "No. of cells = " << clsOnLayer[i].size() << std::endl;
-          std::cout << "     Energy     = " << energy << std::endl;
-          std::cout << "     Phi        = " << position.phi() << std::endl;
-          std::cout << "     Eta        = " << position.eta() << std::endl;
-          std::cout << "*****************************" << std::endl;
-        }
+        // if (verbosity_ < pINFO) {
+        //   std::cout << "******** NEW CLUSTER (HGCIA) ********" << std::endl;
+        //   std::cout << "Index          " << i << std::endl;
+        //   std::cout << "No. of cells = " << clsOnLayer[i].size() << std::endl;
+        //   std::cout << "     Energy     = " << energy << std::endl;
+        //   std::cout << "     Phi        = " << position.phi() << std::endl;
+        //   std::cout << "     Eta        = " << position.eta() << std::endl;
+        //   std::cout << "*****************************" << std::endl;
+        // }
         clusters_v_.emplace_back(energy, position, caloID, thisCluster, algoId_);
 	if (!clusters_v_.empty()){ clusters_v_.back().setSeed( clsOnLayer[i][rsmax].data.detid); }
         thisCluster.clear();
@@ -389,11 +389,11 @@ int HGCalImagingAlgo::findAndAssignClusters(
       continue;
 
     nd[ds[i]].data.clusterIndex = nClustersOnLayer;
-    if (verbosity_ < pINFO) {
-      std::cout << "Adding new cluster with index " << nClustersOnLayer
-                << std::endl;
-      std::cout << "Cluster center is hit " << ds[i] << std::endl;
-    }
+    // if (verbosity_ < pINFO) {
+    //   std::cout << "Adding new cluster with index " << nClustersOnLayer
+    //             << std::endl;
+    //   std::cout << "Cluster center is hit " << ds[i] << std::endl;
+    // }
     nClustersOnLayer++;
   }
 
@@ -417,9 +417,9 @@ int HGCalImagingAlgo::findAndAssignClusters(
   // make room in the temporary cluster vector for the additional clusterIndex
   // clusters
   // from this layer
-  if (verbosity_ < pINFO) {
-    std::cout << "resizing cluster vector by " << nClustersOnLayer << std::endl;
-  }
+  // if (verbosity_ < pINFO) {
+  //   std::cout << "resizing cluster vector by " << nClustersOnLayer << std::endl;
+  // }
   clustersOnLayer.resize(nClustersOnLayer);
 
   // assign points closer than dc to other clusters to border region
@@ -479,17 +479,17 @@ int HGCalImagingAlgo::findAndAssignClusters(
       if (nd[i].data.rho <= rho_b[ci])
         nd[i].data.isHalo = true;
       clustersOnLayer[ci].push_back(nd[i]);
-      if (verbosity_ < pINFO) {
-        std::cout << "Pushing hit " << i << " into cluster with index " << ci
-                  << std::endl;
-      }
+      // if (verbosity_ < pINFO) {
+      //   std::cout << "Pushing hit " << i << " into cluster with index " << ci
+      //             << std::endl;
+      // }
     }
   }
 
   // prepare the offset for the next layer if there is one
-  if (verbosity_ < pINFO) {
-    std::cout << "moving cluster offset by " << nClustersOnLayer << std::endl;
-  }
+  // if (verbosity_ < pINFO) {
+  //   std::cout << "moving cluster offset by " << nClustersOnLayer << std::endl;
+  // }
   return nClustersOnLayer;
 }
 

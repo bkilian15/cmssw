@@ -56,9 +56,12 @@ class HGCalCLUEAlgo : public HGCalClusteringAlgoBase {
      minpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
      maxpos_(2*(maxlayer+1),{ {0.0f,0.0f} }),
      recHitsGPU(2*(maxlayer+1))
-    {}
+    {
+
+    }
     
-  ~HGCalCLUEAlgo() override {}
+  ~HGCalCLUEAlgo() override {
+  }
 
   void populate(const HGCRecHitCollection &hits) override;
   // this is the method that will start the clusterisation (it is possible to invoke this method
@@ -280,7 +283,8 @@ class HGCalCLUEAlgo : public HGCalClusteringAlgoBase {
 
 
 namespace HGCalRecAlgos {
-  double clue_BinGPU(LayerRecHitsGPU &theHits, const unsigned int layer, std::vector<double> vecDeltas_, float, float);
+  double clue_BinGPU(HgcRecHitsGPU &theHits, std::vector<double> vecDeltas_, float, float
+                                                );
 }
 
 #endif

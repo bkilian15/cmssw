@@ -72,40 +72,41 @@ void HGCalCLUEAlgo::populate(const HGCRecHitCollection &hits) {
     // here's were the KDNode is passed its dims arguments - note that these are
     // *copied* from the Hexel
     // determine whether this is a half-hexagon
-    bool isHalf = rhtools_.isHalfCell(detid);
-    points_[layer].emplace_back(Hexel(hgrh, detid, isHalf, sigmaNoise, thickness, &rhtools_),
-                                position.x(), position.y());
+    // bool isHalf = rhtools_.isHalfCell(detid);
+    // points_[layer].emplace_back(Hexel(hgrh, detid, isHalf, sigmaNoise, thickness, &rhtools_),
+    //                             position.x(), position.y());
 
-    // for each layer, store the minimum and maximum x and y coordinates for the
-    // KDTreeBox boundaries
-    if (firstHit[layer]) {
-      minpos_[layer][0] = position.x();
-      minpos_[layer][1] = position.y();
-      maxpos_[layer][0] = position.x();
-      maxpos_[layer][1] = position.y();
-      firstHit[layer] = false;
-    } else {
-      minpos_[layer][0] = std::min((float)position.x(), minpos_[layer][0]);
-      minpos_[layer][1] = std::min((float)position.y(), minpos_[layer][1]);
-      maxpos_[layer][0] = std::max((float)position.x(), maxpos_[layer][0]);
-      maxpos_[layer][1] = std::max((float)position.y(), maxpos_[layer][1]);
-    }
+    // // for each layer, store the minimum and maximum x and y coordinates for the
+    // // KDTreeBox boundaries
+    // if (firstHit[layer]) {
+    //   minpos_[layer][0] = position.x();
+    //   minpos_[layer][1] = position.y();
+    //   maxpos_[layer][0] = position.x();
+    //   maxpos_[layer][1] = position.y();
+    //   firstHit[layer] = false;
+    // } else {
+    //   minpos_[layer][0] = std::min((float)position.x(), minpos_[layer][0]);
+    //   minpos_[layer][1] = std::min((float)position.y(), minpos_[layer][1]);
+    //   maxpos_[layer][0] = std::max((float)position.x(), maxpos_[layer][0]);
+    //   maxpos_[layer][1] = std::max((float)position.y(), maxpos_[layer][1]);
+    // }
 
     // // ------------------------------------
     // // MARK -- bin cpu and gpu
     // // ------------------------------------
-    // RecHitGPU hit;
-    // hit.index = layerCounters[layer];
-    // hit.x = position.x();
-    // hit.y = position.y();
-    // hit.eta = std::fabs(position.eta());
-    // hit.phi = position.phi();
-    // hit.weight = hgrh.energy();
-    // hit.rho = 0.0;
-    // hit.sigmaNoise = sigmaNoise;
-    // recHitsGPU[layer].emplace_back(hit);;
-    // layerCounters[layer]++;
-    // thickness++;
+    RecHitGPU hit;
+    hit.index = layerCounters[layer];
+    hit.x = position.x();
+    hit.y = position.y();
+    hit.eta = std::fabs(position.eta());
+    hit.layer = layer;
+    hit.phi = position.phi();
+    hit.weight = hgrh.energy();
+    hit.rho = 0.0;
+    hit.sigmaNoise = sigmaNoise;
+    recHitsGPU[layer].emplace_back(hit);;
+    layerCounters[layer]++;
+    thickness++;
   }  // end loop hits
 }
 
@@ -120,45 +121,46 @@ void HGCalCLUEAlgo::populate(const HGCRecHitCollection &hits) {
 
 
 void HGCalCLUEAlgo::makeClusters() {
-  double timer0=0;
-  double timer1=0;
-  double timer2=0;
-  double timer3=0;
+  // double timer0=0;
+  // double timer1=0;
+  // double timer2=0;
+  // double timer3=0;
+  // auto start = std::chrono::high_resolution_clock::now();
 
   layerClustersPerLayer_.resize(2 * maxlayer + 2);
   // assign all hits in each layer to a cluster core
-  tbb::this_task_arena::isolate([&] {
-    tbb::parallel_for(size_t(0), size_t(2 * maxlayer + 2), [&](size_t i) {
+  //  tbb::this_task_arena::isolate([&] {
+    //  tbb::parallel_for(size_t(0), size_t(2 * maxlayer + 2), [&](size_t i) {
 
-      unsigned int actualLayer = i > maxlayer
-                                ? (i - (maxlayer + 1))
-                                : i;  // maps back from index used for KD trees to actual layer
+      //  unsigned int actualLayer = i > maxlayer
+                                //  ? (i - (maxlayer + 1))
+                                //  : i;  // maps back from index used for KD trees to actual layer
 
       // ------------------------------------
       // MARK -- kdtree
       // ------------------------------------
-      auto start = std::chrono::high_resolution_clock::now();
-      KDTreeBox bounds(minpos_[i][0], maxpos_[i][0], minpos_[i][1], maxpos_[i][1]);
-      KDTree hit_kdtree;
-      hit_kdtree.build(points_[i], bounds);
-      auto finish = std::chrono::high_resolution_clock::now();
-      timer0 += (std::chrono::duration<double>(finish-start)).count();
+      // auto start = std::chrono::high_resolution_clock::now();
+      // KDTreeBox bounds(minpos_[i][0], maxpos_[i][0], minpos_[i][1], maxpos_[i][1]);
+      // KDTree hit_kdtree;
+      // hit_kdtree.build(points_[i], bounds);
+      // auto finish = std::chrono::high_resolution_clock::now();
+      // timer0 += (std::chrono::duration<double>(finish-start)).count();
 
 
-      start = std::chrono::high_resolution_clock::now();
-      double maxdensity = calculateLocalDensity(points_[i], hit_kdtree,actualLayer);
-      finish = std::chrono::high_resolution_clock::now();
-      timer1 += (std::chrono::duration<double>(finish-start)).count();
+      // start = std::chrono::high_resolution_clock::now();
+      // double maxdensity = calculateLocalDensity(points_[i], hit_kdtree,actualLayer);
+      // finish = std::chrono::high_resolution_clock::now();
+      // timer1 += (std::chrono::duration<double>(finish-start)).count();
 
-      start = std::chrono::high_resolution_clock::now();
-      calculateDistanceToHigher(points_[i]);
-      finish = std::chrono::high_resolution_clock::now();
-      timer2 += (std::chrono::duration<double>(finish-start)).count();
+      // start = std::chrono::high_resolution_clock::now();
+      // calculateDistanceToHigher(points_[i]);
+      // finish = std::chrono::high_resolution_clock::now();
+      // timer2 += (std::chrono::duration<double>(finish-start)).count();
 
-      start = std::chrono::high_resolution_clock::now();
-      findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds, actualLayer,layerClustersPerLayer_[i]);
-      finish = std::chrono::high_resolution_clock::now();
-      timer3 += (std::chrono::duration<double>(finish-start)).count();
+      // start = std::chrono::high_resolution_clock::now();
+      // findAndAssignClusters(points_[i], hit_kdtree, maxdensity, bounds, actualLayer,layerClustersPerLayer_[i]);
+      // finish = std::chrono::high_resolution_clock::now();
+      // timer3 += (std::chrono::duration<double>(finish-start)).count();
 
       
       // // ------------------------------------
@@ -166,10 +168,10 @@ void HGCalCLUEAlgo::makeClusters() {
       // // ------------------------------------
       // // For each layer, assign all RecHits to a bin of a Histo2D
       // auto start = std::chrono::high_resolution_clock::now();
-      // Histo2D histo(-250.0, 250.0, -250.0, 250.0);
-      // for (unsigned int j=0; j<recHitsGPU[i].size(); j++) histo.fillBin(recHitsGPU[i][j].x, recHitsGPU[i][j].y, j);
+      //  Histo2D histo(-250.0, 250.0, -250.0, 250.0);
+      //  for (unsigned int j=0; j<recHitsGPU[i].size(); j++) histo.fillBin(recHitsGPU[i][j].x, recHitsGPU[i][j].y, j);
+      //  std::cout << "Size of layer " << actualLayer << ": " << histo.size() << std::endl;
       // auto finish = std::chrono::high_resolution_clock::now();
-      // timer0 += (std::chrono::duration<double>(finish-start)).count();
 
       // start = std::chrono::high_resolution_clock::now();
       // calculateLocalDensity_BinCPU(histo, recHitsGPU[i], actualLayer);
@@ -190,21 +192,29 @@ void HGCalCLUEAlgo::makeClusters() {
       // // ------------------------------------
       // // MARK -- Bin GPU
       // // ------------------------------------
-      // HGCalRecAlgos::clue_BinGPU(recHitsGPU[i], actualLayer, vecDeltas_, kappa_, outlierDeltaFactor_);
+      //  HGCalRecAlgos::clue_BinGPU(recHitsGPU[i], actualLayer, vecDeltas_, kappa_, outlierDeltaFactor_, dHist, dInputRecHits);
 
+      //  timer0 += (std::chrono::duration<double>(finish-start)).count();
       // // ------------------------------------
       // for (unsigned int j=0; j<recHitsGPU[i].size(); j++){
       //   auto temp = recHitsGPU[i][j];
       //   std::cout << "GPU RecHit N: " << j << " ("<<temp.x<<","<<temp.y<<")" << " | clusterIndex: " << temp.clusterIndex << " | Delta: " << temp.delta << " | NearestHigher: " << temp.nearestHigher << " | Density: " << temp.rho << " | rho_c: " << kappa_*temp.sigmaNoise << " |  nFollowers " << temp.followers.size() << std::endl;
       // }
 
-    }); 
-  });
+    // });
+  // });
+
+  std::cout << "Sto per entrare GPU: " << std::endl;
+  double dou = HGCalRecAlgos::clue_BinGPU(recHitsGPU, vecDeltas_, kappa_, outlierDeltaFactor_);
+  std::cout << dou << " is the result" << std::endl;
   for(auto const& p: points_) { setDensity(p); }
-  std::cout << "-- makeclus timer 0: " << timer0 << " s \n" ;
-  std::cout << "-- makeclus timer 1: " << timer1 << " s \n" ;
-  std::cout << "-- makeclus timer 2: " << timer2 << " s \n" ;
-  std::cout << "-- makeclus timer 3: " << timer3 << " s \n" ;
+  
+  // auto finish = std::chrono::high_resolution_clock::now();
+  // double timer0 = (std::chrono::duration<double>(finish-start)).count();
+  // std::cout << "-- makeclus timer GPU: " << timer0 << " s \n" ;
+  // std::cout << "-- makeclus timer 1: " << timer1 << " s \n" ;
+  // std::cout << "-- makeclus timer 2: " << timer2 << " s \n" ;
+  // std::cout << "-- makeclus timer 3: " << timer3 << " s \n" ;
 
 }
 

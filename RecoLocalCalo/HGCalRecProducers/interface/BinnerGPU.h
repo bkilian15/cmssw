@@ -12,7 +12,7 @@ struct RecHitGPU {
 
         double x;
         double y;
-
+        unsigned int layer;
         double eta;
         double phi;
 

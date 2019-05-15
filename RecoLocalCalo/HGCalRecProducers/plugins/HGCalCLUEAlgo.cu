@@ -27,46 +27,62 @@ namespace HGCalRecAlgos{
   } 
 
   __global__ void kernel_compute_histogram(Histo2D *dOutputData, RecHitGPU *dInputData,  const size_t numRechits) {
-
+    
     size_t rechitLocation = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(rechitLocation >= numRechits)
+    if(rechitLocation >= numRechits) {
+        printf("inside if. recHitsLocation: %d\n", rechitLocation);
         return;
+    }
 
+    int layer = dInputData[rechitLocation].layer;
+    printf("layer (in 1st kernel): %d\n", layer);
+    
     float x = dInputData[rechitLocation].x;
     float y = dInputData[rechitLocation].y;
    
-    dOutputData->fillBinGPU(x, y, rechitLocation);
-
+    dOutputData[layer].fillBinGPU(x, y, rechitLocation);// dOutputData[layer]->fillBinGPU(x, y, rechitLocation);
+    __syncthreads();
   }
 
 
   __global__ void kernel_compute_density( Histo2D* theHist, RecHitGPU* theHits, 
-                                          float delta_c, 
+                                          float* vecDeltas_,//float delta_c, 
                                           int theHitsSize
                                           ) {
-
+    printf("hello from the 2nd kernel!!!!");
     size_t idOne = blockIdx.x * blockDim.x + threadIdx.x;
+    int layer = theHits[idOne].layer;
+    printf("layer (in 2nd kernel): %d\n", layer);
+
+    float delta_c;
+
+    if (layer <= lastLayerEE)
+      delta_c = vecDeltas_[0];
+    else if (layer <= lastLayerFH)
+      delta_c = vecDeltas_[1];
+    else
+      delta_c = vecDeltas_[2];
 
     if (idOne < theHitsSize){
 
 
-      int xBinMin = theHist->computeXBinIndex(std::max(float(theHits[idOne].x - delta_c), theHist->limits_[0]));
-      int xBinMax = theHist->computeXBinIndex(std::min(float(theHits[idOne].x + delta_c), theHist->limits_[1]));
-      int yBinMin = theHist->computeYBinIndex(std::max(float(theHits[idOne].y - delta_c), theHist->limits_[2]));
-      int yBinMax = theHist->computeYBinIndex(std::min(float(theHits[idOne].y + delta_c), theHist->limits_[3]));
+      int xBinMin = theHist[layer].computeXBinIndex(std::max(float(theHits[idOne].x - delta_c), theHist[layer].limits_[0]));
+      int xBinMax = theHist[layer].computeXBinIndex(std::min(float(theHits[idOne].x + delta_c), theHist[layer].limits_[1]));
+      int yBinMin = theHist[layer].computeYBinIndex(std::max(float(theHits[idOne].y - delta_c), theHist[layer].limits_[2]));
+      int yBinMax = theHist[layer].computeYBinIndex(std::min(float(theHits[idOne].y + delta_c), theHist[layer].limits_[3]));
 
       // printf("%f %f %f %f \n", xBinMin, xBinMax, yBinMin, yBinMax);
 
       for(int xBin = xBinMin; xBin < xBinMax+1; ++xBin) {
         for(int yBin = yBinMin; yBin < yBinMax+1; ++yBin) {
           
-          size_t binIndex = theHist->getBinIdx_byBins(xBin,yBin);
-          size_t binSize  = theHist->data_[binIndex].size();
+          size_t binIndex = theHist[layer].getBinIdx_byBins(xBin,yBin);
+          size_t binSize  = theHist[layer].data_[binIndex].size();
 
 
           for (unsigned int j = 0; j < binSize; j++) {
-            int idTwo = (theHist->data_[binIndex])[j];
+            int idTwo = (theHist[layer].data_[binIndex])[j];
 
             double distance = sqrt(distance2GPU(theHits[idOne], theHits[idTwo]));
 
@@ -81,12 +97,22 @@ namespace HGCalRecAlgos{
 
 
   __global__ void kernel_compute_distanceToHigher(Histo2D* theHist, RecHitGPU* theHits,
-                                                  float delta_c, 
+                                                  float* vecDeltas_,//float delta_c, 
                                                   int theHitsSize, 
                                                   float outlierDeltaFactor_
                                                   ) {
-
     size_t idOne = blockIdx.x * blockDim.x + threadIdx.x;
+    int layer = theHits[idOne].layer;
+    printf("layer (in 3rd kernel): %d\n", layer);
+    
+    float delta_c;
+
+    if (layer <= lastLayerEE)
+      delta_c = vecDeltas_[0];
+    else if (layer <= lastLayerFH)
+      delta_c = vecDeltas_[1];
+    else
+      delta_c = vecDeltas_[2];
     // int temp = theHist->getBinIdx_byBins(1,1);
 
     if (idOne < theHitsSize){
@@ -97,27 +123,26 @@ namespace HGCalRecAlgos{
 
       // get search box for ith hit
       // garrantee to cover "outlierDeltaFactor_*delta_c"
-      int xBinMin = theHist->computeXBinIndex(std::max(float(theHits[idOne].x - outlierDeltaFactor_*delta_c), theHist->limits_[0]));
-      int xBinMax = theHist->computeXBinIndex(std::min(float(theHits[idOne].x + outlierDeltaFactor_*delta_c), theHist->limits_[1]));
-      int yBinMin = theHist->computeYBinIndex(std::max(float(theHits[idOne].y - outlierDeltaFactor_*delta_c), theHist->limits_[2]));
-      int yBinMax = theHist->computeYBinIndex(std::min(float(theHits[idOne].y + outlierDeltaFactor_*delta_c), theHist->limits_[3]));
-
+      int xBinMin = theHist[layer].computeXBinIndex(std::max(float(theHits[idOne].x - outlierDeltaFactor_*delta_c), theHist[layer].limits_[0]));
+      int xBinMax = theHist[layer].computeXBinIndex(std::min(float(theHits[idOne].x + outlierDeltaFactor_*delta_c), theHist[layer].limits_[1]));
+      int yBinMin = theHist[layer].computeYBinIndex(std::max(float(theHits[idOne].y - outlierDeltaFactor_*delta_c), theHist[layer].limits_[2]));
+      int yBinMax = theHist[layer].computeYBinIndex(std::min(float(theHits[idOne].y + outlierDeltaFactor_*delta_c), theHist[layer].limits_[3]));
       // loop over all bins in the search box
       for(int xBin = xBinMin; xBin < xBinMax+1; ++xBin) {
         for(int yBin = yBinMin; yBin < yBinMax+1; ++yBin) {
           
           // get the id of this bin
-          size_t binIndex = theHist->getBinIdx_byBins(xBin,yBin);
+          size_t binIndex = theHist[layer].getBinIdx_byBins(xBin,yBin);
           // get the size of this bin
-          size_t binSize  = theHist->data_[binIndex].size();
+          size_t binSize  = theHist[layer].data_[binIndex].size();
 
           // loop over all hits in this bin
           for (unsigned int j = 0; j < binSize; j++) {
-            int idTwo = (theHist->data_[binIndex])[j];
+            int idTwo = (theHist[layer].data_[binIndex])[j];
 
             float distance = sqrt(distance2GPU(theHits[idOne], theHits[idTwo]));
             bool foundHigher = theHits[idTwo].rho > theHits[idOne].rho;
-
+            
             if(foundHigher && distance <= i_delta) {
               // update i_delta
               i_delta = distance;
@@ -145,14 +170,24 @@ namespace HGCalRecAlgos{
 
 
   __global__ void kernel_find_clusters( RecHitGPU* theHits, GPU::VecArray<int,maxNSeeds>* seeds,
-                                        float delta_c, 
+                                        float* vecDeltas_,//float delta_c, 
                                         int theHitsSize, 
                                         float kappa_, 
                                         float outlierDeltaFactor_
                                         ) {
 
     size_t idOne = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t layer = theHits[idOne].layer;
 
+    float delta_c;
+
+    if (layer <= lastLayerEE)
+      delta_c = vecDeltas_[0];
+    else if (layer <= lastLayerFH)
+      delta_c = vecDeltas_[1];
+    else
+      delta_c = vecDeltas_[2];
+    
     if (idOne < theHitsSize){
 
       float rho_c = kappa_ * theHits[idOne].sigmaNoise;
@@ -225,43 +260,48 @@ namespace HGCalRecAlgos{
 
 
 
-  double clue_BinGPU( LayerRecHitsGPU& theHits, 
-                      const unsigned int layer,
+  double clue_BinGPU( HgcRecHitsGPU& theHits,
                       std::vector<double> vecDeltas_, 
                       float kappa_, 
                       float outlierDeltaFactor_) {
 
     double maxdensity = 0.;
-    float delta_c;
-
-    // auto start = std::chrono::high_resolution_clock::now();
     
-
-    // maximum search distance (critical distance) for local density calculation
+    double* vecDeltasData = vecDeltas_.data();
+    float vecDeltasFloat[3];
+    std::copy(vecDeltasData, vecDeltasData+3, vecDeltasFloat);
     
-    if (layer <= lastLayerEE)
-      delta_c = vecDeltas_[0];
-    else if (layer <= lastLayerFH)
-      delta_c = vecDeltas_[1];
-    else
-      delta_c = vecDeltas_[2];
-
-
+    // find total number of hits
+    unsigned int totalNumberOfHits = 0;
+    for(unsigned int layer = 0; layer < theHits.size(); layer++){
+      totalNumberOfHits += theHits[layer].size();
+    }
+    // make input hits for GPU, allocating enough memory
+    RecHitGPU *hInputRecHits = new RecHitGPU[totalNumberOfHits];
+    RecHitGPU *dInputRecHits;
     
-    // make input hits for GPU
-    RecHitGPU *hInputRecHits;
-    hInputRecHits = theHits.data();
-    RecHitGPU *dInputRecHits; 
-    cudaMalloc(&dInputRecHits, sizeof(RecHitGPU)*theHits.size());
-    cudaMemcpy(dInputRecHits, hInputRecHits, sizeof(RecHitGPU)*theHits.size(), cudaMemcpyHostToDevice);
+    // copy 2D vector theHits into 1D array hInputRecHits
+    unsigned int nHits = 0;
+    for(unsigned int layer = 0; layer < theHits.size(); layer++){
+      std::copy(theHits[layer].begin(), theHits[layer].end(), hInputRecHits+nHits);
+      nHits += theHits[layer].size();
+    }
+    cudaMalloc(&dInputRecHits, sizeof(RecHitGPU)*totalNumberOfHits);
+    cudaMemcpy(dInputRecHits, hInputRecHits, sizeof(RecHitGPU)*totalNumberOfHits, cudaMemcpyHostToDevice);
+    
     
     // histogram
     float minX = -250.0, minY = -250.0;
     float maxX =  250.0, maxY =  250.0;
-    Histo2D hHist(minX, maxX, minY, maxY);
+    Histo2D hHist(minX,maxX,minY,maxY);
     Histo2D *dHist;
-    cudaMalloc(&dHist, sizeof(Histo2D));
-    cudaMemcpy(dHist, &hHist, sizeof(Histo2D), cudaMemcpyHostToDevice);
+    cudaMalloc(&dHist, sizeof(Histo2D)*theHits.size());
+    int sizeLayer = 0;
+    for(unsigned int i = 0; i < theHits.size(); i++ ){
+      cudaMemcpy(dHist+sizeLayer, &hHist, sizeof(Histo2D), cudaMemcpyHostToDevice);
+      sizeLayer += hHist.size();
+    }
+    
 
     // define dSeeds as GPU vecArray
     GPU::VecArray<int,maxNSeeds> *dSeeds;
@@ -271,48 +311,52 @@ namespace HGCalRecAlgos{
     
     // Call the kernel
     const dim3 blockSize(1024,1,1);
-    const dim3 gridSize(ceil(theHits.size()/1024.0),1,1);
+    const dim3 gridSize(ceil(totalNumberOfHits/1024.),1,1);
 
-    kernel_compute_histogram <<<gridSize,blockSize>>>(dHist, dInputRecHits,  theHits.size());
+    kernel_compute_histogram <<<gridSize,blockSize>>>(dHist, dInputRecHits,  totalNumberOfHits);
+    cudaDeviceSynchronize();
 
-
+    cudaMemcpy(&hHist, dHist, sizeof(Histo2D), cudaMemcpyDeviceToHost);
+    for(unsigned int i = 0; i < theHits.size(); i++){
+      std::cout << "Size of layer " << i << ": " << hHist[i].size() << std::endl;
+    }
+    
     kernel_compute_density <<<gridSize,blockSize>>>(dHist, dInputRecHits, 
-                                                    delta_c, 
-                                                    theHits.size()
+                                                    vecDeltasFloat,//delta_c, 
+                                                    totalNumberOfHits//theHits.data().size()
                                                     );
 
     kernel_compute_distanceToHigher <<<gridSize,blockSize>>>( dHist, dInputRecHits, 
-                                                              delta_c, 
-                                                              theHits.size(), 
+                                                              vecDeltasFloat,//delta_c, 
+                                                              totalNumberOfHits, 
                                                               outlierDeltaFactor_
                                                               );
 
-    kernel_find_clusters <<<gridSize,blockSize>>>(dInputRecHits, dSeeds,
-                                                  delta_c, 
-                                                  theHits.size(), 
-                                                  kappa_, 
-                                                  outlierDeltaFactor_
-                                                  );
+    // kernel_find_clusters <<<gridSize,blockSize>>>(dInputRecHits, dSeeds,
+    //                                               vecDeltasFloat,//delta_c, 
+    //                                               totalNumberOfHits, 
+    //                                               kappa_, 
+    //                                               outlierDeltaFactor_
+    //                                               );
 
-    const dim3 blockSize_assign_clusters(maxNSeeds,1,1);                                              
-    const dim3 gridSize_assign_clusters(1,1,1);
-    kernel_assign_clusters <<<gridSize_assign_clusters,blockSize_assign_clusters>>>(dInputRecHits, dSeeds);
+    //const dim3 blockSize_assign_clusters(maxNSeeds,1,1);                                              
+    //const dim3 gridSize_assign_clusters(1,1,1);
+    // kernel_assign_clusters <<<gridSize_assign_clusters,blockSize_assign_clusters>>>(dInputRecHits, dSeeds);
 
     // Copy result back!/
-    cudaMemcpy(hInputRecHits, dInputRecHits, sizeof(RecHitGPU)*theHits.size(), cudaMemcpyDeviceToHost);
+    cudaMemcpy(hInputRecHits, dInputRecHits, sizeof(RecHitGPU)*totalNumberOfHits, cudaMemcpyDeviceToHost);
 
 
     // Free all the memory
     cudaFree(dInputRecHits);
-
     cudaFree(dHist);
     cudaFree(dSeeds);
     
-    for(unsigned int j = 0; j< theHits.size(); j++) {
-      if (maxdensity < theHits[j].rho) {
-        maxdensity = theHits[j].rho;
-      }
-    }
+    // for(unsigned int j = 0; j< totalNumberOfHits; j++) {
+    //   if (maxdensity < theHits[j].rho) {
+    //     maxdensity = theHits[j].rho;
+    //   }
+    // } UNCOMMENT LATER
 
     return maxdensity;
 
